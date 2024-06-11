@@ -5,6 +5,7 @@ from webdriver_manager.chrome import ChromeDriverManager
 from bs4 import BeautifulSoup
 import time
 import re
+import pandas as pd
 
 
 def get_stock_lists(url: str) -> list:
@@ -107,13 +108,25 @@ def get_stock_historial_price(url):
 
 
 if __name__ == '__main__':
+    # 定義輸出文件路徑
+    output_file_path = 'output_multiple_sheets.xlsx'
+
     target_urls = ['https://www.digrin.com/stocks/list/exchanges/nyq', 'https://www.digrin.com/stocks/list/exchanges/nas']
     output_stock_list = []
+
     for url in target_urls:
         tmp_output_list = get_stock_lists(url)
         output_stock_list += tmp_output_list
 
     for stock_info in output_stock_list:
+        print("processing " + stock_info[2] + " ......")
         url = 'https://digrin.com' + stock_info[1] + 'price'
         output_list = get_stock_historial_price(url)
-        print(output_list[-1])
+        output_list.insert(0, ['Time', 'adjust_price', 'now_price'])
+
+        # 將數據列表轉換為 DataFrame
+        df = pd.DataFrame(output_list[1:], columns=output_list[0])
+
+        # 使用 ExcelWriter 將數據保存到不同工作表中
+        with pd.ExcelWriter(output_file_path, mode='a') as writer:
+            df.to_excel(writer, sheet_name=stock_info[2], index=False)
