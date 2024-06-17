@@ -1,16 +1,21 @@
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.chrome.options import Options
 from webdriver_manager.chrome import ChromeDriverManager
 from bs4 import BeautifulSoup
 import time
 import re
 import pandas as pd
+import pymysql
+from database import DatabaseController
 
 
 def get_stock_lists(url: str) -> list:
+    chrome_options = Options()
+    chrome_options.add_argument("--headless")
     # 設置ChromeDriver
-    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()))
+    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
 
     # 打開目標網站
     driver.get(url)
@@ -47,6 +52,7 @@ def get_stock_lists(url: str) -> list:
             company_name = str(tds[0]).split('"')[1]
             detail_url = str(tds[0]).split('"')[3]
             short_name = company_name.split(' ')[0]
+            company_name = company_name[len(short_name) + 1:]
             # 拿到 公司全名 detail網址 公司縮寫
             # print(company_name, detail_url, short_name)
             # print("------------------------------------------------")
@@ -57,9 +63,11 @@ def get_stock_lists(url: str) -> list:
 
     return output_list
 
-def get_stock_historial_price(url):
+def get_stock_historial_price(url: str, short_name: str):
+    chrome_options = Options()
+    chrome_options.add_argument("--headless")
     # 設置ChromeDriver
-    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()))
+    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
 
     # 打開目標網站
     driver.get(url)
@@ -99,19 +107,35 @@ def get_stock_historial_price(url):
                 extracted_date = match.group(1).strip()
 
             tmp = tds.split('"')
-            adjusted_price = float(tmp[3].strip(' USD'))
-            real_price = float(tmp[13].strip(' USD'))
 
-            output_list.append([extracted_date, adjusted_price, real_price])
+            # 確認長度正確檢查 tmp 的大小，如果不是則可能沒有資料
+            if len(tmp) == 21:
+                adjusted_price = float(tmp[3].strip(' USD'))
+                real_price = float(tmp[13].strip(' USD'))
+                year = extracted_date.split(' ')[1]
+                month = extracted_date.split(' ')[0]
+                output_list.append([short_name, year, month, adjusted_price, real_price])
 
     return output_list
 
 
 if __name__ == '__main__':
-    # 定義輸出文件路徑
-    output_file_path = 'output_multiple_sheets.xlsx'
+    database_controller = DatabaseController()
 
-    target_urls = ['https://www.digrin.com/stocks/list/exchanges/nyq', 'https://www.digrin.com/stocks/list/exchanges/nas']
+    # 連接到 MySQL 伺服器
+    connection = pymysql.connect(
+        host='localhost',
+        port=3306,
+        user='root',
+        password='',  # 使用 'password' 而不是 'passwd'
+        database='mysql',
+        charset='utf8mb4'  # 使用 utf8mb4 支援更多的字符
+    )
+
+    database_controller.create_database_and_tables(connection)
+
+    # target_urls = ['https://www.digrin.com/stocks/list/exchanges/nyq', 'https://www.digrin.com/stocks/list/exchanges/nas']
+    target_urls = ['https://www.digrin.com/stocks/list/exchanges/nms'] #, 'https://www.digrin.com/stocks/list/exchanges/ngm', 'https://www.digrin.com/stocks/list/exchanges/ncm']
     output_stock_list = []
 
     for url in target_urls:
@@ -121,12 +145,33 @@ if __name__ == '__main__':
     for stock_info in output_stock_list:
         print("processing " + stock_info[2] + " ......")
         url = 'https://digrin.com' + stock_info[1] + 'price'
-        output_list = get_stock_historial_price(url)
-        output_list.insert(0, ['Time', 'adjust_price', 'now_price'])
+        output_list = get_stock_historial_price(url, stock_info[2])
 
-        # 將數據列表轉換為 DataFrame
-        df = pd.DataFrame(output_list[1:], columns=output_list[0])
+        # 將數據寫進 database 裡
+        stock_info_list = [
+            [stock_info[2], stock_info[0]]
+        ]
 
-        # 使用 ExcelWriter 將數據保存到不同工作表中
-        with pd.ExcelWriter(output_file_path, mode='a') as writer:
-            df.to_excel(writer, sheet_name=stock_info[2], index=False)
+        database_controller.insert_stock_info_bulk(connection, stock_info_list)
+        database_controller.insert_stock_price_bulk(connection, output_list)
+
+
+### 筆記 使用 DB script 依序讀取股價資料
+# SELECT *
+# FROM your_table_name
+# ORDER BY stock_symbol ASC, year DESC, 
+# CASE 
+#     WHEN month = 'January' THEN 1
+#     WHEN month = 'February' THEN 2
+#     WHEN month = 'March' THEN 3
+#     WHEN month = 'April' THEN 4
+#     WHEN month = 'May' THEN 5
+#     WHEN month = 'June' THEN 6
+#     WHEN month = 'July' THEN 7
+#     WHEN month = 'August' THEN 8
+#     WHEN month = 'September' THEN 9
+#     WHEN month = 'October' THEN 10
+#     WHEN month = 'November' THEN 11
+#     WHEN month = 'December' THEN 12
+# END DESC;
+

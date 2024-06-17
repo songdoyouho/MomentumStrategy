@@ -1,7 +1,7 @@
 import pymysql
 
 class DatabaseController(object):
-    def create_database_and_tables(connection):
+    def create_database_and_tables(self, connection):
         with connection.cursor() as cursor:
             # 創建資料庫
             cursor.execute("CREATE DATABASE IF NOT EXISTS stocks_db;")
@@ -11,11 +11,7 @@ class DatabaseController(object):
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS stock_list (
                     stock_symbol VARCHAR(10) PRIMARY KEY,
-                    stock_name VARCHAR(100),
-                    dividend_yield DECIMAL(5, 2),
-                    pe_ratio DECIMAL(10, 2),
-                    dividend_frequency INT,
-                    dgr DECIMAL(5, 2)
+                    stock_name VARCHAR(100)
                 );
             """)
             
@@ -32,21 +28,17 @@ class DatabaseController(object):
             """)
         connection.commit()
 
-    def insert_stock_info(connection, stock_symbol, stock_name, dividend_yield, pe_ratio, dividend_frequency, dgr):
+    def insert_stock_info(self, connection, stock_symbol, stock_name):
         with connection.cursor() as cursor:
             cursor.execute("""
-                INSERT INTO stock_list (stock_symbol, stock_name, dividend_yield, pe_ratio, dividend_frequency, dgr)
-                VALUES (%s, %s, %s, %s, %s, %s)
+                INSERT INTO stock_list (stock_symbol, stock_name)
+                VALUES (%s, %s)
                 ON DUPLICATE KEY UPDATE
                 stock_name = VALUES(stock_name),
-                dividend_yield = VALUES(dividend_yield),
-                pe_ratio = VALUES(pe_ratio),
-                dividend_frequency = VALUES(dividend_frequency),
-                dgr = VALUES(dgr);
-            """, (stock_symbol, stock_name, dividend_yield, pe_ratio, dividend_frequency, dgr))
+            """, (stock_symbol, stock_name))
         connection.commit()
 
-    def insert_stock_price(connection, stock_symbol, year, month, adjusted_price, real_price):
+    def insert_stock_price(self, connection, stock_symbol, year, month, adjusted_price, real_price):
         with connection.cursor() as cursor:
             cursor.execute("""
                 INSERT INTO stock_prices (stock_symbol, year, month, adjusted_price, real_price)
@@ -54,22 +46,18 @@ class DatabaseController(object):
             """, (stock_symbol, year, month, adjusted_price, real_price))
         connection.commit()
 
-    def insert_stock_info_bulk(connection, stock_info_list):
+    def insert_stock_info_bulk(self, connection, stock_info_list):
         with connection.cursor() as cursor:
             query = """
-                INSERT INTO stock_list (stock_symbol, stock_name, dividend_yield, pe_ratio, dividend_frequency, dgr)
-                VALUES (%s, %s, %s, %s, %s, %s)
+                INSERT INTO stock_list (stock_symbol, stock_name)
+                VALUES (%s, %s)
                 ON DUPLICATE KEY UPDATE
-                stock_name = VALUES(stock_name),
-                dividend_yield = VALUES(dividend_yield),
-                pe_ratio = VALUES(pe_ratio),
-                dividend_frequency = VALUES(dividend_frequency),
-                dgr = VALUES(dgr);
+                stock_name = VALUES(stock_name)
             """
             cursor.executemany(query, stock_info_list)
         connection.commit()
 
-    def insert_stock_price_bulk(connection, stock_price_list):
+    def insert_stock_price_bulk(self, connection, stock_price_list):
         with connection.cursor() as cursor:
             query = """
                 INSERT INTO stock_prices (stock_symbol, year, month, adjusted_price, real_price)
@@ -97,8 +85,8 @@ if __name__ == '__main__':
         
         # 批量插入股票資訊
         stock_info_list = [
-            ['AAPL', 'Apple Inc.', 0.00, 32.22, 4, 5.00],
-            ['TSLA', 'Tesla Inc.', 0.00, 60.12, 0, 0.00]
+            ['AAPL', 'Apple Inc.'],
+            ['TSLA', 'Tesla Inc.']
         ]
         database_controller.insert_stock_info_bulk(connection, stock_info_list)
         
