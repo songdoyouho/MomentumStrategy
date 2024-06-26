@@ -9,6 +9,12 @@ selenium = "*"
 beautifulsoup4 = "*"
 pandas = "*"
 pymysql = "*"
+undetected-chromedriver = "*"
+setuptools = "*"
+yfinance = "*"
+matplotlib = "*"
+pandas-datareader = "*"
+openpyxl = "*"
 
 [dev-packages]
 
