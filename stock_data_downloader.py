@@ -7,35 +7,34 @@ import time
 import os
 
 class StockDataDownloader:
-    def __init__(self, stock_name, ticker, download_dir):
-        self.stock_name = stock_name
-        self.ticker = ticker
+    def __init__(self, download_dir):
         self.download_dir = download_dir
         self.options = webdriver.ChromeOptions()
         self.options.add_argument("start-maximized")
         self.driver = uc.Chrome(options=self.options)
 
-    def get_download_url(self):
+    def get_download_url(self, ticker, stock_name):
         # 設定目標 URL
-        url = f"https://www.macrotrends.net/stocks/charts/{self.ticker}/{self.stock_name}/stock-price-history"
+        url = f"https://www.macrotrends.net/stocks/charts/{ticker}/{stock_name}/stock-price-history"
         
         # 瀏覽器打開 URL
         self.driver.get(url)
         
         # 切換到 iframe
-        iframe = self.driver.find_element(By.XPATH, f'//iframe[@src="https://www.macrotrends.net/assets/php/stock_price_history.php?t={self.ticker}"]')
+        iframe = self.driver.find_element(By.XPATH, f'//iframe[@src="https://www.macrotrends.net/assets/php/stock_price_history.php?t={ticker}"]')
         self.driver.switch_to.frame(iframe)
         
         # 取得 iframe 的 HTML 內容
         html_content = self.driver.page_source
         
         # 使用正則表達式來找到目標字串
-        pattern = re.compile(r"window\.parent\.location\.href = '(https://www\.macrotrends\.net/assets/php/stock_data_download\.php\?s=[^']+&t=" + self.ticker + ")';")
+        pattern = re.compile(r"window\.parent\.location\.href = '(https://www\.macrotrends\.net/assets/php/stock_data_download\.php\?s=[^']+&t=" + ticker + ")';")
         match = pattern.search(html_content)
         
         self.driver.switch_to.default_content()
         
         if match:
+            print("get download url: " + match.group(1))
             return match.group(1)
         else:
             raise ValueError("未找到下載 URL")
@@ -65,6 +64,6 @@ if __name__ == "__main__":
     ticker = "NVDA"
     download_dir = "/Users/youtengkai/Downloads"
 
-    downloader = StockDataDownloader(stock_name, ticker, download_dir)
-    download_url = downloader.get_download_url()
+    downloader = StockDataDownloader(download_dir)
+    download_url = downloader.get_download_url(ticker, stock_name)
     downloader.download_csv(download_url)
