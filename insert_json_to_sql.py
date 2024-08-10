@@ -12,10 +12,10 @@ class DatabaseController(object):
             # 創建 stock_data 表格
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS stock_data (
-                    date DATE,
+                    date VARCHAR(10),
                     stock_id VARCHAR(10),
-                    trading_volume INT,
-                    trading_money INT,
+                    trading_volume BIGINT,
+                    trading_money BIGINT,
                     open FLOAT,
                     max FLOAT,
                     min FLOAT,
@@ -42,7 +42,10 @@ class DatabaseController(object):
                     spread = VALUES(spread),
                     trading_turnover = VALUES(trading_turnover);
             """
-            cursor.executemany(query, stock_data_list)
+            batch_size = 500
+            for i in range(0, len(stock_data_list), batch_size):
+                batch = stock_data_list[i:i + batch_size]
+                cursor.executemany(query, batch)
         connection.commit()
 
 if __name__ == '__main__':
@@ -66,7 +69,7 @@ if __name__ == '__main__':
 
         for json_file in json_file_list:
             # 載入 JSON 檔案
-            with open('stock_price_data\\' + json_file, 'r', encoding='utf-8') as file:
+            with open('stock_price_data/' + json_file, 'r', encoding='utf-8') as file:
                 data = json.load(file)
             
             # 準備要插入的資料
@@ -82,11 +85,34 @@ if __name__ == '__main__':
                     record['close'],
                     record['spread'],
                     record['Trading_turnover']
-                ) for record in data['data']
+                ) for record in data['data'] if record['close'] != 0
             ]
             
             # 批量插入股票資料
             database_controller.insert_stock_data_bulk(connection, stock_data_list)
+
+        # 載入 JSON 檔案
+        with open('stock_price_data/' + 'TAIEX.json', 'r', encoding='utf-8') as file:
+            data = json.load(file)
+        
+        # 準備要插入的資料
+        stock_data_list = [
+            (
+                record['date'],
+                record['stock_id'],
+                record['Trading_Volume'],
+                record['Trading_money'],
+                record['open'],
+                record['max'],
+                record['min'],
+                record['close'],
+                record['spread'],
+                record['Trading_turnover']
+            ) for record in data['data']
+        ]
+        
+        # 批量插入股票資料
+        database_controller.insert_stock_data_bulk(connection, stock_data_list)
     finally:
         connection.close()
 

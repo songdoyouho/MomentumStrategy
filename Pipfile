@@ -17,6 +17,8 @@ pandas-datareader = "*"
 openpyxl = "*"
 scikit-learn = "*"
 tqdm = "*"
+sqlalchemy = "*"
+statsmodels = "*"
 
 [dev-packages]
 
