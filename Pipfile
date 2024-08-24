@@ -19,6 +19,7 @@ scikit-learn = "*"
 tqdm = "*"
 sqlalchemy = "*"
 statsmodels = "*"
+mplcursors = "*"
 
 [dev-packages]
 

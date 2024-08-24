@@ -146,8 +146,8 @@ if __name__ == '__main__':
     stock_data, TAIEX_data = get_stock_data()
     for key, val in tqdm(stock_data.items(), desc="Processing stocks"):
         print('Processing ', key)
-        for i in range(MomentumSlidingWindow + ResidualMomentumSlidingWindow, len(stock_data[key]) + 1):
-            sliding_window_data = stock_data[key][i-(MomentumSlidingWindow + ResidualMomentumSlidingWindow):i]
+        for i in range(MomentumSlidingWindow, len(stock_data[key]) + 1):
+            sliding_window_data = stock_data[key][i - MomentumSlidingWindow:i]
 
             # 做出 asset_prices, market_prices
             asset_prices = []
@@ -171,10 +171,10 @@ if __name__ == '__main__':
 
             # 檢查 market_prices 與 asset_prices 都是 MomentumSlidingWindow + ResidualMomentumSlidingWindow 個
             assert len(market_prices) == len(asset_prices)
-            assert len(asset_prices) == (MomentumSlidingWindow + ResidualMomentumSlidingWindow)
+            assert len(asset_prices) == MomentumSlidingWindow
 
-            asset_log_returns = [math.log(asset_prices[i+1] / asset_prices[i]) for i in range(MomentumSlidingWindow + ResidualMomentumSlidingWindow - 1)]
-            market_log_returns = [math.log(market_prices[i+1] / market_prices[i]) for i in range(MomentumSlidingWindow + ResidualMomentumSlidingWindow - 1)]
+            asset_log_returns = [math.log(asset_prices[i+1] / asset_prices[i]) for i in range(MomentumSlidingWindow - 1)]
+            market_log_returns = [math.log(market_prices[i+1] / market_prices[i]) for i in range(MomentumSlidingWindow - 1)]
 
             # 如果跑到這邊表示 ok
             # 接著算 residual momentum

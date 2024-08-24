@@ -44,3 +44,5 @@ if __name__ == "__main__":
         get_stock_price(processing_stock[0], processing_stock[1])
 
     # get_stock_price('TAIEX', '2024-08-01')
+
+    # get_stock_price('2424', '2024-08-01')
