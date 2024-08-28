@@ -10,11 +10,22 @@ class TradingSystem():
         self.trade_log = []  # 新增交易紀錄
 
     def find_valid_date_in_before(self, stock_id, target_date):
-        while target_date not in self.database_dict[stock_id] and self.date_list.index(target_date) > 0:
-            target_date = self.date_list[self.date_list.index(target_date) - 1]
+        while target_date not in self.database_dict[stock_id]:
+            if target_date in self.date_list:
+                target_date = self.date_list[self.date_list.index(target_date) - 1]
+            else:
+                target_date = self.date_list[-1]
         
         close_price = self.database_dict[stock_id][target_date]['close']
         return target_date, close_price
+        # while target_date not in self.database_dict[stock_id] and self.date_list.index(target_date) > 0:
+        #     if target_date not in self.date_list or self.date_list.index(target_date) == 0:
+        #         target_date = self.date_list[self.date_list.index(target_date) - 1]
+        #     else:
+        #         target_date = self.date_list[-1]
+        
+        # close_price = self.database_dict[stock_id][target_date]['close']
+        # return target_date, close_price
 
     def adjust(self, date, stock_id, stock_price, stock_quantity):
         # 檢查 portfolio 裡面的庫存量
@@ -30,6 +41,7 @@ class TradingSystem():
 
     def long_stock(self, date, stock_id, stock_price, stock_quantity, action):
         if action == 'buy':
+            print('buy', stock_id, stock_price, stock_quantity)
             cost = stock_price * 1000 * stock_quantity
             transaction_fee = math.floor(cost * 0.001425)
             total_cost = cost + transaction_fee
@@ -58,6 +70,7 @@ class TradingSystem():
         elif action == 'sell':
             if stock_id in self.portfolio:
                 if self.portfolio[stock_id]['stock_quantity'] >= stock_quantity:
+                    print('sell', stock_id, stock_price, stock_quantity)
                     revenue = stock_price * 1000 * stock_quantity
                     transaction_fee = math.floor(revenue * 0.004425)
                     total_revenue = revenue - transaction_fee

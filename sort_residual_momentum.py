@@ -2,7 +2,7 @@ import math
 import pymysql
 import mplcursors
 from portfolio import TradingSystem
-from get_first_day_and_yesterday import get_first_day_and_yesterday
+from date_manegement.get_first_day_and_yesterday import get_first_day_and_yesterday
 
 def get_backtest_date():
     # 建立資料庫連線
@@ -23,13 +23,14 @@ def get_backtest_date():
             date_list = [row['date'] for row in cursor.fetchall()]
 
             # 2. 取得每個 `stock_id` 的 `date`, `stock_id`, `close`, `residual_momentum` 並轉換成指定格式
-            cursor.execute("SELECT stock_id, date, open, close, residual_momentum FROM stock_data;")
+            cursor.execute("SELECT stock_id, trading_money, date, open, close, residual_momentum FROM stock_data;")
             data = cursor.fetchall()
             database_dict = {}
             for info in data:
                 if info['stock_id'] not in database_dict:
                     database_dict[info['stock_id']] = {}
                 database_dict[info['stock_id']][info['date']] = {
+                    'trading_money': info['trading_money'],
                     'open': info['open'],
                     'close': info['close'],
                     'residual_momentum': info['residual_momentum']
@@ -82,6 +83,29 @@ def calculate_stock_quantity(portfolio_split, open_price, fee_rate):
     
     return max_quantity
 
+def get_daliy_median(date_list, stock_id_list, database_dict):
+    from statistics import median
+
+    # 用於記錄 trading_money 大於當天中位數的股票
+    daily_median_trading_money = {}
+
+    # 計算每日 trading_money 中位數並過濾股票
+    for date in date_list:
+        trading_money_list = []
+
+        for stock_id in stock_id_list:
+            if date in database_dict[stock_id]:
+                trading_money = database_dict[stock_id][date]['trading_money']
+                if trading_money is not None:
+                    trading_money_list.append(trading_money)
+
+        # 計算當天的 trading_money 中位數
+        if trading_money_list:
+            median_trading_money = median(trading_money_list)
+            daily_median_trading_money[date] = median_trading_money
+
+    return daily_median_trading_money
+
 import matplotlib.pyplot as plt
 
 if __name__ == '__main__':
@@ -92,6 +116,9 @@ if __name__ == '__main__':
     # 用於記錄 total_value 和日期
     total_values = []
     dates = []
+
+    # 先用 trading_money 的中位數過濾掉交易量比較小的股票
+    daliy_median = get_daliy_median(date_list, stock_id_list, database_dict)
 
     # 拿到每天的 residual momentum 然後排序，存成 dictionary
     sorted_stock_id_residual_momentum_dict = {}
@@ -107,30 +134,48 @@ if __name__ == '__main__':
         sorted_stock_id_residual_momentum = dict(sorted(stock_id_residual_momentum.items(), key=lambda item: item[1], reverse=True))
         sorted_stock_id_residual_momentum_dict[date] = sorted_stock_id_residual_momentum
 
+    # 拿到每個月的第一個開盤日日期，以及前一天的開盤日日期
     first_day_in_a_month = get_first_day_and_yesterday()
 
     for day in first_day_in_a_month:
+        print(day)
         first_date = day[0]
         yesterday = day[1]
         sorted_stock_id_residual_momentum = sorted_stock_id_residual_momentum_dict[yesterday]
-        
+
+        daliy_median_value = daliy_median.get(yesterday, 0)  # 取得昨天的交易金額中位數
+        filtered_sorted_stock_id_residual_momentum = {}
+        # filtered_sorted_stock_id_residual_momentum = {stock_id: momentum for stock_id, momentum in sorted_stock_id_residual_momentum.items() if database_dict[stock_id][yesterday]['trading_money'] > daliy_median_value}
+        for stock_id, momentum in sorted_stock_id_residual_momentum.items():
+            trading_money = database_dict[stock_id][yesterday]['trading_money']
+            if trading_money is not None:
+                if trading_money > daliy_median_value:
+                    filtered_sorted_stock_id_residual_momentum[stock_id] = sorted_stock_id_residual_momentum[stock_id]
+            
+        # print(len(filtered_sorted_stock_id_residual_momentum), len(sorted_stock_id_residual_momentum))
+        # 找出那一天 residual momentum 前十及後十的股票
         top_10 = []
         bottom_10 = []
-        for i, (key, value) in enumerate(sorted_stock_id_residual_momentum.items()):
+        for i, (key, value) in enumerate(filtered_sorted_stock_id_residual_momentum.items()):
             if i < 10:
                 top_10.append(key)
-        
-            if i > len(sorted_stock_id_residual_momentum) - 11:
+
+            if i > len(filtered_sorted_stock_id_residual_momentum) - 11:
                 bottom_10.append(key)
 
+        # 確認前 10 的股票有沒有在目前的 portfolio 裡
         portfolio = trading_system.portfolio
         stocks_not_in_top_10 = set(portfolio.keys()) - set(top_10)
 
-        # 找出 portfolio 裡不在 top 10 的股票
+        # 找出 portfolio 裡不在 top 10 的股票，並賣出
         for stock_id in stocks_not_in_top_10:
             valid_date_in_future, _ = find_next_valid_date_in_future(database_dict, stock_id, date_list, first_date)
-            stock_price = database_dict[stock_id][valid_date_in_future]['open']
-            trading_system.long_stock(valid_date_in_future, stock_id, stock_price, portfolio[stock_id]['stock_quantity'], 'sell')
+            if valid_date_in_future is None:
+                stock_price = portfolio[stock_id]['stock_price']
+                trading_system.long_stock(valid_date_in_future, stock_id, stock_price, portfolio[stock_id]['stock_quantity'], 'sell')
+            else:
+                stock_price = database_dict[stock_id][valid_date_in_future]['open']
+                trading_system.long_stock(valid_date_in_future, stock_id, stock_price, portfolio[stock_id]['stock_quantity'], 'sell')
 
         # 以今天的開盤價算總資產
         total_value = trading_system.show_portfolio(first_date, 'open')
