@@ -2,3 +2,4 @@ stock_price_data
 __pycache__
 crypto_market
 .DS_Store
+.pytest_cache
