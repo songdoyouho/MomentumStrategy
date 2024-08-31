@@ -5,6 +5,14 @@ from portfolio import TradingSystem
 from date_manegement.get_first_day_and_yesterday import get_first_day_and_yesterday
 
 def get_backtest_date():
+    """
+    從資料庫中提取回測所需的日期和股票數據。
+
+    :return: (date_list, database_dict, stock_id_list)
+        - date_list: 不重複的日期列表
+        - database_dict: 字典，包含每個股票的數據（交易金額、開盤價、收盤價、殘差動量）
+        - stock_id_list: 不重複的股票ID列表
+    """
     # 建立資料庫連線
     connection = pymysql.connect(
         host='localhost',
@@ -46,12 +54,31 @@ def get_backtest_date():
     return date_list, database_dict, stock_id_list
 
 def find_valid_date_in_before(database_dict, stock_id, date_list, target_date):
+    """
+    找到給定日期之前的最近一個有效交易日及其收盤價。
+
+    :param database_dict: 股票數據字典
+    :param stock_id: 股票ID
+    :param date_list: 日期列表
+    :param target_date: 目標日期
+    :return: (target_date, close_price) 最近有效交易日及其收盤價
+    """
     while target_date not in database_dict[stock_id] and date_list.index(target_date) > 0:
         target_date = date_list[date_list.index(target_date) - 1]
     
     close_price = database_dict[stock_id][target_date]['close']
     return target_date, close_price
+
 def find_next_valid_date_in_future(database_dict, stock_id, date_list, start_date):
+    """
+    找到給定日期之後的最近一個有效交易日及其開盤價。
+
+    :param database_dict: 股票數據字典
+    :param stock_id: 股票ID
+    :param date_list: 日期列表
+    :param start_date: 起始日期
+    :return: (current_date, open_price) 最近有效交易日及其開盤價
+    """
     date_index = date_list.index(start_date)
     for i in range(date_index, len(date_list)):
         current_date = date_list[i]
@@ -63,7 +90,7 @@ def find_next_valid_date_in_future(database_dict, stock_id, date_list, start_dat
 
 def calculate_stock_quantity(portfolio_split, open_price, fee_rate):
     """
-    計算考慮手續費後的最大購買股數
+    計算考慮手續費後的最大購買股數。
 
     :param portfolio_split: 用於購買單一股票的資金
     :param open_price: 股票的開盤價
@@ -84,6 +111,14 @@ def calculate_stock_quantity(portfolio_split, open_price, fee_rate):
     return max_quantity
 
 def get_daliy_median(date_list, stock_id_list, database_dict):
+    """
+    計算每個日期的交易金額中位數，並過濾交易金額大於中位數的股票。
+
+    :param date_list: 日期列表
+    :param stock_id_list: 股票ID列表
+    :param database_dict: 股票數據字典
+    :return: 字典，鍵為日期，值為交易金額中位數
+    """
     from statistics import median
 
     # 用於記錄 trading_money 大於當天中位數的股票
@@ -145,21 +180,18 @@ if __name__ == '__main__':
 
         daliy_median_value = daliy_median.get(yesterday, 0)  # 取得昨天的交易金額中位數
         filtered_sorted_stock_id_residual_momentum = {}
-        # filtered_sorted_stock_id_residual_momentum = {stock_id: momentum for stock_id, momentum in sorted_stock_id_residual_momentum.items() if database_dict[stock_id][yesterday]['trading_money'] > daliy_median_value}
         for stock_id, momentum in sorted_stock_id_residual_momentum.items():
             trading_money = database_dict[stock_id][yesterday]['trading_money']
             if trading_money is not None:
                 if trading_money > daliy_median_value:
                     filtered_sorted_stock_id_residual_momentum[stock_id] = sorted_stock_id_residual_momentum[stock_id]
             
-        # print(len(filtered_sorted_stock_id_residual_momentum), len(sorted_stock_id_residual_momentum))
-        # 找出那一天 residual momentum 前十及後十的股票
+        # 找出當天 residual momentum 最前十及最後十的股票
         top_10 = []
         bottom_10 = []
         for i, (key, value) in enumerate(filtered_sorted_stock_id_residual_momentum.items()):
             if i < 10:
                 top_10.append(key)
-
             if i > len(filtered_sorted_stock_id_residual_momentum) - 11:
                 bottom_10.append(key)
 
@@ -186,18 +218,21 @@ if __name__ == '__main__':
         # 把總資產切成 10 等份，無條件捨去
         portfolio_split = math.floor(total_value / 10)
 
+        # 根據過濾後的 top 10 股票進行交易調整
         for stock_id in top_10:
             valid_date_in_future, open_price = find_next_valid_date_in_future(database_dict, stock_id, date_list, first_date)
             valid_date_in_before, close_price = find_valid_date_in_before(database_dict, stock_id, date_list, yesterday)
             stock_quantity = calculate_stock_quantity(portfolio_split, open_price, 0.001425)
             trading_system.adjust(valid_date_in_future, stock_id, open_price, stock_quantity)
 
+        # 顯示目前投資組合
         trading_system.show_portfolio(first_date, 'open')
         print("---------------------------------------------------------------------------")
 
+    # 將交易記錄導出到 Excel 文件
     trading_system.export_trade_log_to_excel()
 
-    # 畫圖
+    # 畫出總資產變化圖
     plt.figure(figsize=(10, 6))
     plt.plot(dates, total_values, marker='o', linestyle='-', color='b')
     plt.xlabel('Date')
