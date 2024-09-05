@@ -30,11 +30,11 @@ class TradingSystem():
     def adjust(self, date, stock_id, stock_price, stock_quantity):
         # 檢查 portfolio 裡面的庫存量
         if stock_id in self.portfolio:
-            if self.portfolio[stock_id]['stock_quantity'] > stock_quantity:
-                sell_quantity = self.portfolio[stock_id]['stock_quantity'] - stock_quantity
+            if self.portfolio[stock_id]['long_quantity'] > stock_quantity:
+                sell_quantity = self.portfolio[stock_id]['long_quantity'] - stock_quantity
                 self.long_stock(date, stock_id, stock_price, sell_quantity, 'sell')
             else:
-                buy_quantity = stock_quantity - self.portfolio[stock_id]['stock_quantity']
+                buy_quantity = stock_quantity - self.portfolio[stock_id]['long_quantity']
                 self.long_stock(date, stock_id, stock_price, buy_quantity, 'buy')
         else:
             self.long_stock(date, stock_id, stock_price, stock_quantity, 'buy')
@@ -51,7 +51,7 @@ class TradingSystem():
                 if stock_id in self.portfolio:
                     self.portfolio[stock_id]['long_quantity'] += stock_quantity
                 else:
-                    self.portfolio[stock_id] = {'long_price': stock_price, 'long_quantity': stock_quantity}
+                    self.portfolio[stock_id] = {'long_price': stock_price, 'long_quantity': stock_quantity, 'transaction_fee': transaction_fee}
                 
                 # 記錄交易
                 self.trade_log.append({
@@ -77,9 +77,16 @@ class TradingSystem():
                     total_revenue = revenue - transaction_fee
                     self.initial_money += total_revenue
                     self.portfolio[stock_id]['long_quantity'] -= stock_quantity
+
+                    # 獲利計算
+                    buy_price = self.portfolio[stock_id]['long_price']
+                    buy_in_transaction_fee = self.portfolio[stock_id]['transaction_fee']
+                    profit_amount = (stock_price - buy_price) * 1000 * stock_quantity - transaction_fee - buy_in_transaction_fee
+                    profit_percent = (profit_amount / ((buy_price * 1000 * stock_quantity) + transaction_fee + buy_in_transaction_fee)) * 100
+
                     if self.portfolio[stock_id]['long_quantity'] == 0:
                         del self.portfolio[stock_id]
-                    
+
                     # 記錄交易
                     self.trade_log.append({
                         'date': date,
@@ -89,6 +96,8 @@ class TradingSystem():
                         'stock_quantity': stock_quantity,
                         'transaction_fee': transaction_fee,
                         'total_revenue': total_revenue,
+                        'profit_amount': profit_amount,  # 實際獲利金額
+                        'profit_percent': profit_percent,  # 獲利百分比
                         'initial_money': self.initial_money,
                         'total_value': self.show_portfolio(date, 'open')
                     })
@@ -106,7 +115,7 @@ class TradingSystem():
                 if stock_id in self.portfolio:
                     self.portfolio[stock_id]['short_quantity'] += stock_quantity
                 else:
-                    self.portfolio[stock_id] = {'short_price': stock_price, 'short_quantity': stock_quantity}
+                    self.portfolio[stock_id] = {'short_price': stock_price, 'short_quantity': stock_quantity, 'transaction_fee': transaction_fee}
                 
                 # 記錄交易
                 self.trade_log.append({
@@ -132,6 +141,13 @@ class TradingSystem():
                     total_cost = cost + transaction_fee
                     self.initial_money -= total_cost
                     self.portfolio[stock_id]['short_quantity'] -= stock_quantity
+
+                    # 獲利計算
+                    sell_price = self.portfolio[stock_id]['short_price']
+                    sell_transaction_fee = self.portfolio[stock_id]['transaction_fee']
+                    profit_amount = (sell_price - stock_price) * 1000 * stock_quantity - transaction_fee - sell_transaction_fee
+                    profit_percent = (profit_amount / ((sell_price * 1000 * stock_quantity) - sell_transaction_fee)) * 100
+
                     if self.portfolio[stock_id]['short_quantity'] == 0:
                         del self.portfolio[stock_id]
                     
@@ -144,6 +160,8 @@ class TradingSystem():
                         'stock_quantity': stock_quantity,
                         'transaction_fee': transaction_fee,
                         'total_cost': total_cost,
+                        'profit_amount': profit_amount,  # 實際獲利金額
+                        'profit_percent': profit_percent,  # 獲利百分比
                         'initial_money': self.initial_money,
                         'total_value': self.show_portfolio(date, 'open')
                     })
@@ -160,7 +178,6 @@ class TradingSystem():
             valid_date_in_before, _ = self.find_valid_date_in_before(stock_id, date)
             stock_price = self.database_dict[stock_id][valid_date_in_before][open_or_close]
 
-            # 分別計算多頭和空頭的總價值
             long_value = portfolio_item.get('long_quantity', 0) * stock_price * 1000
             short_value = portfolio_item.get('short_quantity', 0) * stock_price * 1000
             
@@ -171,10 +188,9 @@ class TradingSystem():
         print("初始現金: ", self.initial_money)
         print("投資組合總價值: ", total_value)
 
-        # 檢查 total_value 是否小於 0，並且在必要時候進行處理
         if total_value < 0:
             print("Warning: Total value is negative, which means bankruptcy.")
-            total_value = 0  # 可以選擇將 total_value 設置為 0 或執行其他操作
+            total_value = 0
 
         return total_value
 
@@ -190,49 +206,60 @@ class TradingSystem():
 if __name__ == "__main__":
     # 測試 TradingSystem 類別的功能
 
-    # 假設的歷年數據字典
     database_dict = {
         'AAPL': {
             '2024-01-01': {'open': 100, 'close': 100},
-            '2024-01-02': {'open': 110, 'close': 110},
-            '2024-01-03': {'open': 120, 'close': 120},
+            '2024-02-01': {'open': 110, 'close': 110},
+            '2024-03-01': {'open': 120, 'close': 120},
         },
         'GOOG': {
             '2024-01-01': {'open': 100, 'close': 100},
-            '2024-01-02': {'open': 110, 'close': 110},
-            '2024-01-03': {'open': 120, 'close': 120},
+            '2024-02-01': {'open': 110, 'close': 110},
+            '2024-03-01': {'open': 120, 'close': 120},
         }
     }
 
-    # 假設的日期列表
-    date_list = ['2024-01-01', '2024-01-02', '2024-01-03']
-
-    # 初始化 TradingSystem
+    date_list = ['2024-01-01', '2024-02-01', '2024-03-01']
     trading_system = TradingSystem(database_dict, date_list)
-
-    # 模擬交易
     print("開始測試交易系統...")
 
-    # 測試買入 AAPL 100 股
+    # 第一個月
     trading_system.long_stock('2024-01-01', 'AAPL', 100, 10, 'buy')
 
-    # 測試賣出 AAPL 50 股
-    trading_system.long_stock('2024-01-02', 'AAPL', 110, 10, 'sell')
+    # 第二個月
+    trading_system.long_stock('2024-02-01', 'AAPL', 110, 10, 'sell')
+    trading_system.initial_money = 10000000
+    trading_system.long_stock('2024-02-01', 'GOOG', 110, 10, 'buy')
 
-    # 測試做空 GOOG 10 股
-    trading_system.short_stock('2024-01-02', 'GOOG', 110, 10, 'sell')
-
-    # 測試回補 GOOG 5 股
-    trading_system.short_stock('2024-01-03', 'GOOG', 120, 10, 'buy')
-
-    # 顯示交易日誌
-    print("\n交易日誌:")
+    # 第三個月
+    trading_system.long_stock('2024-03-01', 'GOOG', 120, 10, 'sell')
+    trading_system.initial_money = 10000000
     trading_system.show_trade_log()
 
-    # 顯示投資組合
-    trading_system.show_portfolio('2024-01-03', 'close')
+    trading_system.show_portfolio('2024-03-01', 'close')
 
-    # 將交易日誌導出到 Excel
     trading_system.export_trade_log_to_excel('test_trade_log.xlsx')
 
     print("\n測試完成。")
+
+    # # 第一個月，做空 GOOG
+    # trading_system.short_stock('2024-01-01', 'GOOG', 100, 10, 'sell')
+
+    # # 第二個月，回補 GOOG
+    # trading_system.short_stock('2024-02-01', 'GOOG', 110, 10, 'buy')
+    # trading_system.initial_money = 10000000
+    
+    # # 再次做空 AAPL
+    # trading_system.short_stock('2024-02-01', 'AAPL', 110, 10, 'sell')
+
+    # # 第三個月，回補 AAPL
+    # trading_system.short_stock('2024-03-01', 'AAPL', 120, 10, 'buy')
+    # trading_system.initial_money = 10000000
+
+    # trading_system.show_trade_log()
+
+    # trading_system.show_portfolio('2024-03-01', 'close')
+
+    # trading_system.export_trade_log_to_excel('test_trade_log_short.xlsx')
+
+    # print("\n測試完成。")
