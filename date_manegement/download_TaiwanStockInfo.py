@@ -16,7 +16,7 @@ response = requests.get(url, params=params)
 if response.status_code == 200:
     data = response.json()
     # 將數據寫入 JSON 文件
-    with open("TaiwanStockInfo.json", "w", encoding="utf-8") as f:
+    with open("../stock_information/TaiwanStockInfo.json", "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=4)
     print("數據已成功保存至 TaiwanStockInfo.json")
 else:

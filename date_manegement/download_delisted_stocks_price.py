@@ -31,7 +31,7 @@ def get_stock_price(stock_id, end_date):
         failed_stocks.append(stock_id)
 
 # 讀取 CSV 文件
-csv_file_path = 'delisted_stock_in_OTC_market.csv'
+csv_file_path = '../stock_information/delisted_stock_in_OTC_market.csv'
 delisted_stocks = pd.read_csv(csv_file_path)
 
 print(delisted_stocks)

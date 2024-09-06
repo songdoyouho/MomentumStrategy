@@ -289,7 +289,6 @@ if __name__ == '__main__':
     # 遍歷所有交易紀錄
     for trade in trading_system.trade_log:
         if trade['action'] in ['sell', 'buy'] and 'profit_amount' in trade:
-            print(trade)
             total_profit_loss += trade['profit_amount']
             total_return_rate += trade['profit_percent']
             total_trades += 1

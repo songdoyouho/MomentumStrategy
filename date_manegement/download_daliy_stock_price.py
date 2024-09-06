@@ -23,7 +23,7 @@ def get_stock_price(stock_id, end_date):
     # data = pd.DataFrame(data["data"])
 
 if __name__ == "__main__":
-    with open("TaiwanStockInfo.json", "r", encoding="utf-8") as f:
+    with open("../stock_information/TaiwanStockInfo.json", "r", encoding="utf-8") as f:
         results = json.load(f)
 
     data = results["data"]
