@@ -61,7 +61,7 @@ if __name__ == '__main__':
         charset='utf8mb4'  # 使用 utf8mb4 支援更多的字符
     )
 
-    json_file_list = os.listdir('stock_price_data')
+    json_file_list = os.listdir('../stock_price_data')
 
     try:
         # 創建資料庫和表格
@@ -69,7 +69,7 @@ if __name__ == '__main__':
 
         for json_file in json_file_list:
             # 載入 JSON 檔案
-            with open('stock_price_data/' + json_file, 'r', encoding='utf-8') as file:
+            with open('../stock_price_data/' + json_file, 'r', encoding='utf-8') as file:
                 data = json.load(file)
             
             # 準備要插入的資料
@@ -91,28 +91,28 @@ if __name__ == '__main__':
             # 批量插入股票資料
             database_controller.insert_stock_data_bulk(connection, stock_data_list)
 
-        # 載入 JSON 檔案
-        with open('stock_price_data/' + 'TAIEX.json', 'r', encoding='utf-8') as file:
-            data = json.load(file)
+        # # 載入 JSON 檔案
+        # with open('../stock_price_data/' + 'TAIEX.json', 'r', encoding='utf-8') as file:
+        #     data = json.load(file)
         
-        # 準備要插入的資料
-        stock_data_list = [
-            (
-                record['date'],
-                record['stock_id'],
-                record['Trading_Volume'],
-                record['Trading_money'],
-                record['open'],
-                record['max'],
-                record['min'],
-                record['close'],
-                record['spread'],
-                record['Trading_turnover']
-            ) for record in data['data']
-        ]
+        # # 準備要插入的資料
+        # stock_data_list = [
+        #     (
+        #         record['date'],
+        #         record['stock_id'],
+        #         record['Trading_Volume'],
+        #         record['Trading_money'],
+        #         record['open'],
+        #         record['max'],
+        #         record['min'],
+        #         record['close'],
+        #         record['spread'],
+        #         record['Trading_turnover']
+        #     ) for record in data['data']
+        # ]
         
-        # 批量插入股票資料
-        database_controller.insert_stock_data_bulk(connection, stock_data_list)
+        # # 批量插入股票資料
+        # database_controller.insert_stock_data_bulk(connection, stock_data_list)
     finally:
         connection.close()
 

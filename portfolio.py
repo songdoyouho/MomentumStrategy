@@ -3,7 +3,7 @@ import pandas as pd
 
 class TradingSystem():
     def __init__(self, database_dict, date_list):
-        self.initial_money = 10000000  # 初始現金
+        self.initial_money = 20000000  # 初始現金
         self.portfolio = {}  # 股票持倉
         self.database_dict = database_dict  # 歷年的資料
         self.date_list = date_list
@@ -51,7 +51,7 @@ class TradingSystem():
                 if stock_id in self.portfolio:
                     self.portfolio[stock_id]['long_quantity'] += stock_quantity
                 else:
-                    self.portfolio[stock_id] = {'long_price': stock_price, 'long_quantity': stock_quantity, 'transaction_fee': transaction_fee}
+                    self.portfolio[stock_id] = {'long_price': stock_price, 'long_quantity': stock_quantity, 'transaction_fee': transaction_fee, 'position': 'long'}
                 
                 # 記錄交易
                 self.trade_log.append({
@@ -63,7 +63,7 @@ class TradingSystem():
                     'transaction_fee': transaction_fee,
                     'total_cost': total_cost,
                     'initial_money': self.initial_money,
-                    'total_value': self.show_portfolio(date, 'open')
+                    'total_value': self.show_portfolio(date, 'open', False)
                 })
             else:
                 print(f"Not enough money to buy {stock_quantity} units of {stock_id}. Available: {self.initial_money}, Required: {total_cost}")
@@ -99,7 +99,7 @@ class TradingSystem():
                         'profit_amount': profit_amount,  # 實際獲利金額
                         'profit_percent': profit_percent,  # 獲利百分比
                         'initial_money': self.initial_money,
-                        'total_value': self.show_portfolio(date, 'open')
+                        'total_value': self.show_portfolio(date, 'open', False)
                     })
 
     def short_stock(self, date, stock_id, stock_price, stock_quantity, action):
@@ -115,7 +115,7 @@ class TradingSystem():
                 if stock_id in self.portfolio:
                     self.portfolio[stock_id]['short_quantity'] += stock_quantity
                 else:
-                    self.portfolio[stock_id] = {'short_price': stock_price, 'short_quantity': stock_quantity, 'transaction_fee': transaction_fee}
+                    self.portfolio[stock_id] = {'short_price': stock_price, 'short_quantity': stock_quantity, 'transaction_fee': transaction_fee, 'position': 'short'}
                 
                 # 記錄交易
                 self.trade_log.append({
@@ -127,7 +127,7 @@ class TradingSystem():
                     'transaction_fee': transaction_fee,
                     'total_revenue': total_revenue,
                     'initial_money': self.initial_money,
-                    'total_value': self.show_portfolio(date, 'open')
+                    'total_value': self.show_portfolio(date, 'open', False)
                 })
             else:
                 print(f"Not enough margin to short {stock_quantity} units of {stock_id}. Available: {self.initial_money}, Required: {total_revenue}")
@@ -163,16 +163,17 @@ class TradingSystem():
                         'profit_amount': profit_amount,  # 實際獲利金額
                         'profit_percent': profit_percent,  # 獲利百分比
                         'initial_money': self.initial_money,
-                        'total_value': self.show_portfolio(date, 'open')
+                        'total_value': self.show_portfolio(date, 'open', False)
                     })
                 else:
                     print(f"Not enough short position to cover {stock_quantity} units of {stock_id}.")
             else:
                 print(f"No short position found for {stock_id} to cover.")
 
-    def show_portfolio(self, date, open_or_close):
+    def show_portfolio(self, date, open_or_close, print_flag=True):
         total_value = self.initial_money
-        print("\n投資組合狀況:")
+        if print_flag:
+            print("\n投資組合狀況:")
         
         for stock_id, portfolio_item in self.portfolio.items():
             valid_date_in_before, _ = self.find_valid_date_in_before(stock_id, date)
@@ -182,14 +183,16 @@ class TradingSystem():
             short_value = portfolio_item.get('short_quantity', 0) * stock_price * 1000
             
             total_value += long_value - short_value
-            
-            print(f"{stock_id} 多頭數量: {portfolio_item.get('long_quantity', 0)}, 空頭數量: {portfolio_item.get('short_quantity', 0)}, 當前價格: {stock_price}, 多頭價值: {long_value}, 空頭價值: {short_value}")
+            if print_flag:
+                print(f"{stock_id} 多頭數量: {portfolio_item.get('long_quantity', 0)}, 空頭數量: {portfolio_item.get('short_quantity', 0)}, 當前價格: {stock_price}, 多頭價值: {long_value}, 空頭價值: {short_value}")
 
-        print("初始現金: ", self.initial_money)
-        print("投資組合總價值: ", total_value)
+        if print_flag:
+            print("初始現金: ", self.initial_money)
+            print("投資組合總價值: ", total_value)
 
         if total_value < 0:
-            print("Warning: Total value is negative, which means bankruptcy.")
+            if print_flag:
+                print("Warning: Total value is negative, which means bankruptcy.")
             total_value = 0
 
         return total_value

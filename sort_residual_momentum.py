@@ -1,6 +1,7 @@
 import math
 import pymysql
 import mplcursors
+import matplotlib.pyplot as plt
 from portfolio import TradingSystem
 from date_manegement.get_first_day_and_yesterday import get_first_day_and_yesterday
 
@@ -141,8 +142,6 @@ def get_daliy_median(date_list, stock_id_list, database_dict):
 
     return daily_median_trading_money
 
-import matplotlib.pyplot as plt
-
 if __name__ == '__main__':
     print("get backtest date")
     date_list, database_dict, stock_id_list = get_backtest_date()
@@ -172,13 +171,16 @@ if __name__ == '__main__':
     # 拿到每個月的第一個開盤日日期，以及前一天的開盤日日期
     first_day_in_a_month = get_first_day_and_yesterday()
 
+    monthly_profit_percent = []
+    monthly_profit_amount = []
+
     for day in first_day_in_a_month:
         print(day)
-        first_date = day[0]
-        yesterday = day[1]
+        first_date = day[0] # 這個月的開盤日
+        yesterday = day[1] # 這個月開盤日的前一天開盤日
         sorted_stock_id_residual_momentum = sorted_stock_id_residual_momentum_dict[yesterday]
 
-        daliy_median_value = daliy_median.get(yesterday, 0)  # 取得昨天的交易金額中位數
+        daliy_median_value = daliy_median.get(yesterday, 0)  # 取得昨天的交易金額中位數 TODO 改成用前一個月的平均交易金額中位數
         filtered_sorted_stock_id_residual_momentum = {}
         for stock_id, momentum in sorted_stock_id_residual_momentum.items():
             trading_money = database_dict[stock_id][yesterday]['trading_money']
@@ -195,39 +197,104 @@ if __name__ == '__main__':
             if i > len(filtered_sorted_stock_id_residual_momentum) - 11:
                 bottom_10.append(key)
 
-        # 確認前 10 的股票有沒有在目前的 portfolio 裡
         portfolio = trading_system.portfolio
-        stocks_not_in_top_10 = set(portfolio.keys()) - set(top_10)
+        if portfolio:
+            stock_id_list_in_portfolio = list(trading_system.portfolio.keys())
+            for stock_id in stock_id_list_in_portfolio:
+                valid_date_in_future, _ = find_next_valid_date_in_future(database_dict, stock_id, date_list, first_date)
+                if valid_date_in_future is None:
+                    if portfolio[stock_id]['position'] == 'long':
+                        stock_price = portfolio[stock_id]['long_price']
+                        trading_system.long_stock(valid_date_in_future, stock_id, stock_price, portfolio[stock_id]['long_quantity'], 'sell')
+                    elif portfolio[stock_id]['position'] == 'short':
+                        stock_price = portfolio[stock_id]['short_price']
+                        trading_system.short_stock(valid_date_in_future, stock_id, stock_price, portfolio[stock_id]['short_quantity'], 'buy')
+                    monthly_profit_percent.append(trading_system.trade_log[-1]['profit_percent'])
+                    monthly_profit_amount.append(trading_system.trade_log[-1]['profit_amount'])
+                else:
+                    stock_price = database_dict[stock_id][valid_date_in_future]['open']
+                    if portfolio[stock_id]['position'] == 'long':
+                        trading_system.long_stock(valid_date_in_future, stock_id, stock_price, portfolio[stock_id]['long_quantity'], 'sell')
+                    elif portfolio[stock_id]['position'] == 'short':
+                        trading_system.short_stock(valid_date_in_future, stock_id, stock_price, portfolio[stock_id]['short_quantity'], 'buy')
+                    print(trading_system.trade_log[-1]['profit_percent'], trading_system.trade_log[-1]['profit_amount'])
+                    monthly_profit_percent.append(trading_system.trade_log[-1]['profit_percent'])
+                    monthly_profit_amount.append(trading_system.trade_log[-1]['profit_amount'])
 
-        # 找出 portfolio 裡不在 top 10 的股票，並賣出
-        for stock_id in stocks_not_in_top_10:
-            valid_date_in_future, _ = find_next_valid_date_in_future(database_dict, stock_id, date_list, first_date)
-            if valid_date_in_future is None:
-                stock_price = portfolio[stock_id]['stock_price']
-                trading_system.long_stock(valid_date_in_future, stock_id, stock_price, portfolio[stock_id]['stock_quantity'], 'sell')
-            else:
-                stock_price = database_dict[stock_id][valid_date_in_future]['open']
-                trading_system.long_stock(valid_date_in_future, stock_id, stock_price, portfolio[stock_id]['stock_quantity'], 'sell')
+        # 計算當月的交易結果
+        if monthly_profit_percent and monthly_profit_amount:
+            avg_monthly_profit_percent = sum(monthly_profit_percent) / len(monthly_profit_percent)
+            total_monthly_profit_amount = sum(monthly_profit_amount)
+            
+            print(f"當月平均收益率: {avg_monthly_profit_percent:.2f}%")
+            print(f"當月總收益金額: {total_monthly_profit_amount:.2f}")
 
-        # 以今天的開盤價算總資產
-        total_value = trading_system.show_portfolio(first_date, 'open')
-        # 記錄 total_value 和日期
-        total_values.append(total_value)
-        dates.append(first_date)
+            total_values.append(total_monthly_profit_amount)
+            dates.append(first_date)
+            
+            # 重置月度收益列表，為下個月做準備
+            monthly_profit_percent = []
+            monthly_profit_amount = []
+        else:
+            print("本月沒有交易記錄")
 
-        # 把總資產切成 10 等份，無條件捨去
-        portfolio_split = math.floor(total_value / 10)
-
-        # 根據過濾後的 top 10 股票進行交易調整
+        # 重新設定初始資金
+        trading_system.initial_money = 20000000
+        portfolio_split = 1000000
+        # 根據過濾後的 top 10 股票進行做多交易
         for stock_id in top_10:
             valid_date_in_future, open_price = find_next_valid_date_in_future(database_dict, stock_id, date_list, first_date)
             valid_date_in_before, close_price = find_valid_date_in_before(database_dict, stock_id, date_list, yesterday)
             stock_quantity = calculate_stock_quantity(portfolio_split, open_price, 0.001425)
-            trading_system.adjust(valid_date_in_future, stock_id, open_price, stock_quantity)
+            if stock_quantity > 0:
+                stock_price = database_dict[stock_id][valid_date_in_future]['open']
+                trading_system.long_stock(valid_date_in_future, stock_id, stock_price, stock_quantity, 'buy')
+
+        # 根據過濾後的 bottom 10 股票進行做空交易
+        for stock_id in bottom_10:
+            valid_date_in_future, open_price = find_next_valid_date_in_future(database_dict, stock_id, date_list, first_date)
+            valid_date_in_before, close_price = find_valid_date_in_before(database_dict, stock_id, date_list, yesterday)
+            stock_quantity = calculate_stock_quantity(portfolio_split, open_price, 0.001425)
+            if stock_quantity > 0:
+                stock_price = database_dict[stock_id][valid_date_in_future]['open']
+                trading_system.short_stock(valid_date_in_future, stock_id, stock_price, stock_quantity, 'sell')
 
         # 顯示目前投資組合
         trading_system.show_portfolio(first_date, 'open')
         print("---------------------------------------------------------------------------")
+
+    # 計算所有交易結果
+    total_profit_loss = 0
+    total_return_rate = 0
+    total_trades = 0
+    profitable_trades = 0
+    losing_trades = 0
+
+    # 遍歷所有交易紀錄
+    for trade in trading_system.trade_log:
+        if trade['action'] in ['sell', 'buy'] and 'profit_amount' in trade.keys():
+            print(trade)
+            total_profit_loss += trade['profit_amount']
+            total_return_rate += trade['profit_percent']
+            total_trades += 1
+            if trade['profit_amount'] > 0:
+                profitable_trades += 1
+            else:
+                losing_trades += 1
+
+    # 計算平均報酬率和勝率
+    average_return_rate = total_return_rate / total_trades if total_trades > 0 else 0
+    win_rate = (profitable_trades / total_trades) * 100 if total_trades > 0 else 0
+
+    # 印出交易結果
+    print("交易結果摘要：")
+    print(f"總盈虧：{total_profit_loss:.2f}")
+    print(f"平均報酬率：{average_return_rate:.2f}%")
+    print(f"總交易次數：{total_trades}")
+    print(f"獲利交易次數：{profitable_trades}")
+    print(f"虧損交易次數：{losing_trades}")
+    print(f"勝率：{win_rate:.2f}%")
+    print(f"最終總資產：{trading_system.show_portfolio(date_list[-1], 'close'):.2f}")
 
     # 將交易記錄導出到 Excel 文件
     trading_system.export_trade_log_to_excel()
