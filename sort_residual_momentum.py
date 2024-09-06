@@ -4,6 +4,8 @@ import mplcursors
 import matplotlib.pyplot as plt
 from portfolio import TradingSystem
 from date_manegement.get_first_day_and_yesterday import get_first_day_and_yesterday
+from datetime import datetime, timedelta
+import numpy as np
 
 def get_backtest_date():
     """
@@ -142,6 +144,20 @@ def get_daliy_median(date_list, stock_id_list, database_dict):
 
     return daily_median_trading_money
 
+def get_previous_month_average_median(date, daliy_median):
+    current_date = datetime.strptime(date, "%Y-%m-%d")
+    one_month_ago = current_date - timedelta(days=30)
+    
+    previous_month_medians = [
+        value for key, value in daliy_median.items()
+        if one_month_ago <= datetime.strptime(key, "%Y-%m-%d") < current_date
+    ]
+    
+    if previous_month_medians:
+        return sum(previous_month_medians) / len(previous_month_medians)
+    else:
+        return 0
+
 if __name__ == '__main__':
     print("get backtest date")
     date_list, database_dict, stock_id_list = get_backtest_date()
@@ -180,12 +196,12 @@ if __name__ == '__main__':
         yesterday = day[1] # 這個月開盤日的前一天開盤日
         sorted_stock_id_residual_momentum = sorted_stock_id_residual_momentum_dict[yesterday]
 
-        daliy_median_value = daliy_median.get(yesterday, 0)  # 取得昨天的交易金額中位數 TODO 改成用前一個月的平均交易金額中位數
+        monthly_median_value = get_previous_month_average_median(yesterday, daliy_median)
         filtered_sorted_stock_id_residual_momentum = {}
         for stock_id, momentum in sorted_stock_id_residual_momentum.items():
             trading_money = database_dict[stock_id][yesterday]['trading_money']
             if trading_money is not None:
-                if trading_money > daliy_median_value:
+                if trading_money > monthly_median_value:
                     filtered_sorted_stock_id_residual_momentum[stock_id] = sorted_stock_id_residual_momentum[stock_id]
             
         # 找出當天 residual momentum 最前十及最後十的股票
@@ -272,7 +288,7 @@ if __name__ == '__main__':
 
     # 遍歷所有交易紀錄
     for trade in trading_system.trade_log:
-        if trade['action'] in ['sell', 'buy'] and 'profit_amount' in trade.keys():
+        if trade['action'] in ['sell', 'buy'] and 'profit_amount' in trade:
             print(trade)
             total_profit_loss += trade['profit_amount']
             total_return_rate += trade['profit_percent']
@@ -305,6 +321,19 @@ if __name__ == '__main__':
     plt.xlabel('Date')
     plt.ylabel('Total Value')
     plt.title('Total Value Over Time')
+
+    # 添加水平零軸線
+    plt.axhline(y=0, color='r', linestyle='--')
+
+    # 修改 Y 軸刻度
+    min_value = min(total_values)
+    max_value = max(total_values)
+    plt.ylim(min_value, max_value)  # 設置 Y 軸範圍
+    plt.yticks(np.linspace(min_value, max_value, 10))  # 設置 10 個均勻分布的刻度
+
+    # 格式化 Y 軸標籤
+    plt.gca().yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: format(int(x), ',')))
+
     plt.xticks(ticks=range(0, len(dates), 10), rotation=45)
-    plt.xticks(rotation=45)
+    plt.tight_layout()  # 自動調整佈局以防止標籤被切掉
     plt.show()
