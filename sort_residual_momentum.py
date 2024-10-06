@@ -3,7 +3,7 @@ import pymysql
 import mplcursors
 import matplotlib.pyplot as plt
 from portfolio import TradingSystem
-from date_manegement.get_first_day_and_yesterday import get_first_day_and_yesterday
+from date_manegement.utils import get_first_day_and_yesterday
 from datetime import datetime, timedelta
 import numpy as np
 
@@ -12,7 +12,7 @@ def get_backtest_date():
     從資料庫中提取回測所需的日期和股票數據。
 
     :return: (date_list, database_dict, stock_id_list)
-        - date_list: 不重複的日期列表
+        - date_list: 不重複且按時間順序排序的日期列表
         - database_dict: 字典，包含每個股票的數據（交易金額、開盤價、收盤價、殘差動量）
         - stock_id_list: 不重複的股票ID列表
     """
@@ -29,8 +29,8 @@ def get_backtest_date():
 
     try:
         with connection.cursor() as cursor:
-            # 1. 取得不重複的 `date` 並存成一個 list
-            cursor.execute("SELECT DISTINCT date FROM stock_data;")
+            # 1. 取得不重複的 `date` 並存成一個按時間順序排序的 list
+            cursor.execute("SELECT DISTINCT date FROM stock_data ORDER BY date ASC;")
             date_list = [row['date'] for row in cursor.fetchall()]
 
             # 2. 取得每個 `stock_id` 的 `date`, `stock_id`, `close`, `residual_momentum` 並轉換成指定格式
