@@ -41,32 +41,33 @@ class TradingSystem():
 
     def long_stock(self, date, stock_id, stock_price, stock_quantity, action):
         if action == 'buy':
-            print('buy', stock_id, stock_price, stock_quantity)
-            cost = stock_price * 1000 * stock_quantity
-            transaction_fee = math.floor(cost * 0.001425)
-            total_cost = cost + transaction_fee
+            if stock_quantity > 0:
+                print('buy', stock_id, stock_price, stock_quantity)
+                cost = stock_price * 1000 * stock_quantity
+                transaction_fee = math.floor(cost * 0.001425)
+                total_cost = cost + transaction_fee
 
-            if self.initial_money >= total_cost:  # 檢查是否有足夠資金進行購買
-                self.initial_money -= total_cost
-                if stock_id in self.portfolio:
-                    self.portfolio[stock_id]['long_quantity'] += stock_quantity
+                if self.initial_money >= total_cost:  # 檢查是否有足夠資金進行購買
+                    self.initial_money -= total_cost
+                    if stock_id in self.portfolio:
+                        self.portfolio[stock_id]['long_quantity'] += stock_quantity
+                    else:
+                        self.portfolio[stock_id] = {'long_price': stock_price, 'long_quantity': stock_quantity, 'transaction_fee': transaction_fee, 'position': 'long'}
+                    
+                    # 記錄交易
+                    self.trade_log.append({
+                        'date': date,
+                        'stock_id': stock_id,
+                        'action': 'buy',
+                        'stock_price': stock_price,
+                        'stock_quantity': stock_quantity,
+                        'transaction_fee': transaction_fee,
+                        'total_cost': total_cost,
+                        'initial_money': self.initial_money,
+                        'total_value': self.show_portfolio(date, 'open', False)
+                    })
                 else:
-                    self.portfolio[stock_id] = {'long_price': stock_price, 'long_quantity': stock_quantity, 'transaction_fee': transaction_fee, 'position': 'long'}
-                
-                # 記錄交易
-                self.trade_log.append({
-                    'date': date,
-                    'stock_id': stock_id,
-                    'action': 'buy',
-                    'stock_price': stock_price,
-                    'stock_quantity': stock_quantity,
-                    'transaction_fee': transaction_fee,
-                    'total_cost': total_cost,
-                    'initial_money': self.initial_money,
-                    'total_value': self.show_portfolio(date, 'open', False)
-                })
-            else:
-                print(f"Not enough money to buy {stock_quantity} units of {stock_id}. Available: {self.initial_money}, Required: {total_cost}")
+                    print(f"Not enough money to buy {stock_quantity} units of {stock_id}. Available: {self.initial_money}, Required: {total_cost}")
 
         elif action == 'sell':
             if stock_id in self.portfolio and 'long_quantity' in self.portfolio[stock_id]:
@@ -104,33 +105,34 @@ class TradingSystem():
 
     def short_stock(self, date, stock_id, stock_price, stock_quantity, action):
         if action == 'sell':
-            print('sell', stock_id, stock_price, stock_quantity)
-            revenue = stock_price * 1000 * stock_quantity
-            transaction_fee = math.floor(revenue * 0.004425)
-            total_revenue = revenue - transaction_fee
+            if stock_quantity > 0:
+                print('sell', stock_id, stock_price, stock_quantity)
+                revenue = stock_price * 1000 * stock_quantity
+                transaction_fee = math.floor(revenue * 0.004425)
+                total_revenue = revenue - transaction_fee
 
-            # 檢查是否有足夠的擔保金進行做空
-            if self.initial_money >= total_revenue:  
-                self.initial_money += total_revenue
-                if stock_id in self.portfolio:
-                    self.portfolio[stock_id]['short_quantity'] += stock_quantity
+                # 檢查是否有足夠的擔保金進行做空
+                if self.initial_money >= total_revenue:  
+                    self.initial_money += total_revenue
+                    if stock_id in self.portfolio:
+                        self.portfolio[stock_id]['short_quantity'] += stock_quantity
+                    else:
+                        self.portfolio[stock_id] = {'short_price': stock_price, 'short_quantity': stock_quantity, 'transaction_fee': transaction_fee, 'position': 'short'}
+                    
+                    # 記錄交易
+                    self.trade_log.append({
+                        'date': date,
+                        'stock_id': stock_id,
+                        'action': 'sell',
+                        'stock_price': stock_price,
+                        'stock_quantity': stock_quantity,
+                        'transaction_fee': transaction_fee,
+                        'total_revenue': total_revenue,
+                        'initial_money': self.initial_money,
+                        'total_value': self.show_portfolio(date, 'open', False)
+                    })
                 else:
-                    self.portfolio[stock_id] = {'short_price': stock_price, 'short_quantity': stock_quantity, 'transaction_fee': transaction_fee, 'position': 'short'}
-                
-                # 記錄交易
-                self.trade_log.append({
-                    'date': date,
-                    'stock_id': stock_id,
-                    'action': 'sell',
-                    'stock_price': stock_price,
-                    'stock_quantity': stock_quantity,
-                    'transaction_fee': transaction_fee,
-                    'total_revenue': total_revenue,
-                    'initial_money': self.initial_money,
-                    'total_value': self.show_portfolio(date, 'open', False)
-                })
-            else:
-                print(f"Not enough margin to short {stock_quantity} units of {stock_id}. Available: {self.initial_money}, Required: {total_revenue}")
+                    print(f"Not enough margin to short {stock_quantity} units of {stock_id}. Available: {self.initial_money}, Required: {total_revenue}")
 
         elif action == 'buy':
             if stock_id in self.portfolio and 'short_quantity' in self.portfolio[stock_id]:
@@ -201,10 +203,16 @@ class TradingSystem():
         for trade in self.trade_log:
             print(trade)
 
-    def export_trade_log_to_excel(self, filename='trade_log.xlsx'):
-        df = pd.DataFrame(self.trade_log)
-        df.to_excel(filename, index=False)
-        print(f"Trade log exported to {filename}")
+    def export_trade_log_to_excel(self, filename='trade_log.xlsx', summary_data=None):
+        # 將摘要數據轉換為DataFrame
+        summary_df = pd.DataFrame(summary_data)
+        trade_log_df = pd.DataFrame(self.trade_log)
+        # 創建ExcelWriter對象
+        with pd.ExcelWriter(filename, engine='openpyxl', mode='w') as writer:
+            # 將摘要數據寫入新的sheet
+            summary_df.to_excel(writer, sheet_name='summary', index=False)
+            trade_log_df.to_excel(writer, sheet_name='trade_log', index=False)
+            print(f"Trade log exported to {filename}")
 
 if __name__ == "__main__":
     # 測試 TradingSystem 類別的功能

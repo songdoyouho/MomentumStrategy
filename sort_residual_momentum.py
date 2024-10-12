@@ -184,8 +184,13 @@ if __name__ == '__main__':
         sorted_stock_id_residual_momentum = dict(sorted(stock_id_residual_momentum.items(), key=lambda item: item[1], reverse=True))
         sorted_stock_id_residual_momentum_dict[date] = sorted_stock_id_residual_momentum
 
+    first_date = None
+    for date in sorted_stock_id_residual_momentum_dict.keys():
+        first_date = date
+        break
+
     # 拿到每個月的第一個開盤日日期，以及前一天的開盤日日期
-    first_day_in_a_month = get_first_day_and_yesterday()
+    first_day_in_a_month = get_first_day_and_yesterday(first_date)
 
     monthly_profit_percent = []
     monthly_profit_amount = []
@@ -258,7 +263,7 @@ if __name__ == '__main__':
         trading_system.initial_money = 20000000
         portfolio_split = 1000000
         # 根據過濾後的 top 10 股票進行做多交易
-        for stock_id in top_10:
+        for stock_id in bottom_10:
             valid_date_in_future, open_price = find_next_valid_date_in_future(database_dict, stock_id, date_list, first_date)
             valid_date_in_before, close_price = find_valid_date_in_before(database_dict, stock_id, date_list, yesterday)
             stock_quantity = calculate_stock_quantity(portfolio_split, open_price, 0.001425)
@@ -267,7 +272,7 @@ if __name__ == '__main__':
                 trading_system.long_stock(valid_date_in_future, stock_id, stock_price, stock_quantity, 'buy')
 
         # 根據過濾後的 bottom 10 股票進行做空交易
-        for stock_id in bottom_10:
+        for stock_id in top_10:
             valid_date_in_future, open_price = find_next_valid_date_in_future(database_dict, stock_id, date_list, first_date)
             valid_date_in_before, close_price = find_valid_date_in_before(database_dict, stock_id, date_list, yesterday)
             stock_quantity = calculate_stock_quantity(portfolio_split, open_price, 0.001425)

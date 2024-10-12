@@ -156,10 +156,17 @@ def execute_long_trades(top_10, first_date, yesterday, database_dict, date_list,
         print(stock_id, first_date)
         valid_date_in_future, open_price = find_next_valid_date_in_future(database_dict, stock_id, date_list, first_date)
         valid_date_in_before, close_price = find_valid_date_in_before(database_dict, stock_id, date_list, yesterday)
-        stock_quantity = calculate_stock_quantity(portfolio_split, open_price, 0.001425)
-        if stock_quantity > 0:
+        try:
+            stock_quantity = calculate_stock_quantity(portfolio_split, open_price, 0.001425) 
+        except:
+            stock_quantity = calculate_stock_quantity(portfolio_split, close_price, 0.001425) 
+        
+        if stock_quantity > 0 and open_price is not None and valid_date_in_future is not None:
             stock_price = database_dict[stock_id][valid_date_in_future]['open']
             trading_system.long_stock(valid_date_in_future, stock_id, stock_price, stock_quantity, 'buy')
+        else:
+            stock_price = database_dict[stock_id][valid_date_in_before]['open']
+            trading_system.long_stock(valid_date_in_before, stock_id, stock_price, stock_quantity, 'buy')
 
 def execute_short_trades(bottom_10, first_date, yesterday, database_dict, date_list, portfolio_split, trading_system):
     """
@@ -177,18 +184,25 @@ def execute_short_trades(bottom_10, first_date, yesterday, database_dict, date_l
     for stock_id in bottom_10:
         valid_date_in_future, open_price = find_next_valid_date_in_future(database_dict, stock_id, date_list, first_date)
         valid_date_in_before, close_price = find_valid_date_in_before(database_dict, stock_id, date_list, yesterday)
-        stock_quantity = calculate_stock_quantity(portfolio_split, open_price, 0.001425)
-        if stock_quantity > 0:
+        try:
+            stock_quantity = calculate_stock_quantity(portfolio_split, open_price, 0.001425)
+        except:
+            stock_quantity = calculate_stock_quantity(portfolio_split, close_price, 0.001425)
+        
+        if stock_quantity > 0 and open_price is not None and valid_date_in_future is not None:
             stock_price = database_dict[stock_id][valid_date_in_future]['open']
             trading_system.short_stock(valid_date_in_future, stock_id, stock_price, stock_quantity, 'sell')
+        else:
+            stock_price = database_dict[stock_id][valid_date_in_before]['open']
+            trading_system.short_stock(valid_date_in_before, stock_id, stock_price, stock_quantity, 'sell')
 
-def calculate_and_print_trading_results(trading_system, date_list):
+def calculate_and_print_trading_results(trading_system, output_xlsx_name):
     """
     計算並打印交易結果
     
     參數:
     trading_system: 交易系統實例
-    date_list: 日期列表
+    output_xlsx_name: 輸出的 Excel 檔案名稱
     """
     total_profit_loss = 0
     total_return_rate = 0
@@ -216,9 +230,18 @@ def calculate_and_print_trading_results(trading_system, date_list):
     print(f"獲利交易次數：{profitable_trades}")
     print(f"虧損交易次數：{losing_trades}")
     print(f"勝率：{win_rate:.2f}%")
-    print(f"最終總資產：{trading_system.show_portfolio(date_list[-1], 'close'):.2f}")
 
-    trading_system.export_trade_log_to_excel()
+    # 創建一個包含交易結果摘要的字典
+    summary_data = {
+        "總盈虧": [f"{total_profit_loss:.2f}"],
+        "平均報酬率": [f"{average_return_rate:.2f}%"],
+        "總交易次數": [total_trades],
+        "獲利交易次數": [profitable_trades],
+        "虧損交易次數": [losing_trades],
+        "勝率": [f"{win_rate:.2f}%"]
+    }
+
+    trading_system.export_trade_log_to_excel(output_xlsx_name, summary_data) # 應該帶入每次測試的參數當檔名
 
 def plot_total_value_over_time(dates, total_values):
     """
@@ -248,72 +271,78 @@ def plot_total_value_over_time(dates, total_values):
     plt.show()
 
 if __name__ == '__main__':
-    date_list, database_dict, stock_id_list, trading_system, daliy_median, sorted_stock_id_residual_momentum_dict, first_day_in_a_month = initialize_data(500, 40)
+    # 問題： stock_quantity 為 0 時，賣的時候會出現問題 => 在第一次買/賣的時候先檢查 stock_quantity 是否大於 0
+    # 找 future price 的時候，如果沒有資料，要怎麼處理? 這會導致下個 loop 賣不掉這個持股 => 如果 future price 是 None，則往前找
 
-    total_values = []
-    dates = []
+    for MomentumSlidingWindow in range(500, 1001, 40):
+        for ResidualMomentumSlidingWindow in range(40, min(MomentumSlidingWindow, 981), 40):
+            date_list, database_dict, stock_id_list, trading_system, daliy_median, sorted_stock_id_residual_momentum_dict, first_day_in_a_month = initialize_data(MomentumSlidingWindow, ResidualMomentumSlidingWindow)
 
-    # 拿到每天的 trading money 的中位數
-    daliy_median = get_daliy_median(date_list, stock_id_list, database_dict)
+            total_values = []
+            dates = []
 
-    # 拿到每天的 residual momentum 然後排序，存成 dictionary
-    sorted_dates = sorted(sorted_stock_id_residual_momentum_dict.keys(), key=lambda x: datetime.strptime(x, '%Y-%m-%d'))
-    sorted_dict = {date: sorted_stock_id_residual_momentum_dict[date] for date in sorted_dates}
-    sorted_stock_id_residual_momentum_dict = sorted_dict
+            # 拿到每天的 trading money 的中位數
+            daliy_median = get_daliy_median(date_list, stock_id_list, database_dict)
 
-    first_date = None
-    for date in sorted_stock_id_residual_momentum_dict.keys():
-        first_date = date
-        break
+            # 拿到每天的 residual momentum 然後排序，存成 dictionary
+            sorted_dates = sorted(sorted_stock_id_residual_momentum_dict.keys(), key=lambda x: datetime.strptime(x, '%Y-%m-%d'))
+            sorted_dict = {date: sorted_stock_id_residual_momentum_dict[date] for date in sorted_dates}
+            sorted_stock_id_residual_momentum_dict = sorted_dict
 
-    # 拿到每個月的第一個開盤日日期，以及前一天的開盤日日期
-    first_day_in_a_month = get_first_day_and_yesterday(first_date)
+            first_date = None
+            for date in sorted_stock_id_residual_momentum_dict.keys():
+                first_date = date
+                break
 
-    monthly_profit_percent = []
-    monthly_profit_amount = []
+            # 拿到每個月的第一個開盤日日期，以及前一天的開盤日日期
+            first_day_in_a_month = get_first_day_and_yesterday(first_date)
 
-    # 遍歷每個月的開盤日
-    for day in first_day_in_a_month:
-        print(day)
-        first_date = day[0] # 這個月的開盤日
-        yesterday = day[1] # 這個月開盤日的前一天開盤日
-        sorted_stock_id_residual_momentum = sorted_stock_id_residual_momentum_dict[yesterday] # 前一天的殘差動量排序
-        monthly_median_value = get_previous_month_average_median(yesterday, daliy_median) # 前一個月的中位數
+            monthly_profit_percent = []
+            monthly_profit_amount = []
 
-        # 過濾掉交易量比較小的股票
-        filtered_sorted_stock_id_residual_momentum = filter_stocks_by_trading_volume(
-            sorted_stock_id_residual_momentum,
-            database_dict,
-            yesterday,
-            monthly_median_value
-        )
-            
-        # 找出當天 residual momentum 最前十及最後十的股票
-        top_10 = []
-        bottom_10 = []
-        for i, (key, value) in enumerate(filtered_sorted_stock_id_residual_momentum.items()):
-            if i < 10:
-                top_10.append(key)
-            if i > len(filtered_sorted_stock_id_residual_momentum) - 11:
-                bottom_10.append(key)
+            # 遍歷每個月的開盤日
+            for day in first_day_in_a_month:
+                print(day)
+                first_date = day[0] # 這個月的開盤日
+                yesterday = day[1] # 這個月開盤日的前一天開盤日
+                sorted_stock_id_residual_momentum = sorted_stock_id_residual_momentum_dict[yesterday] # 前一天的殘差動量排序
+                monthly_median_value = get_previous_month_average_median(yesterday, daliy_median) # 前一個月的中位數
 
-        portfolio = trading_system.portfolio
-        # 處理前一個月的持股，通通平倉，並計算損益
-        monthly_profit_percent, monthly_profit_amount = close_all_positions(trading_system, database_dict, date_list, first_date)
-        monthly_profit_percent, monthly_profit_amount = calculate_monthly_results(monthly_profit_percent, monthly_profit_amount, first_date, total_values, dates, trading_system)
-        # 重新設定初始資金
-        trading_system.initial_money = 20000000
-        portfolio_split = 1000000
-        
-        execute_long_trades(top_10, first_date, yesterday, database_dict, date_list, portfolio_split, trading_system)
-        execute_short_trades(bottom_10, first_date, yesterday, database_dict, date_list, portfolio_split, trading_system)
+                # 過濾掉交易量比較小的股票
+                filtered_sorted_stock_id_residual_momentum = filter_stocks_by_trading_volume(
+                    sorted_stock_id_residual_momentum,
+                    database_dict,
+                    yesterday,
+                    monthly_median_value
+                )
+                    
+                # 找出當天 residual momentum 最前十及最後十的股票
+                top_10 = []
+                bottom_10 = []
+                for i, (key, value) in enumerate(filtered_sorted_stock_id_residual_momentum.items()):
+                    if i < 10:
+                        top_10.append(key)
+                    if i > len(filtered_sorted_stock_id_residual_momentum) - 11:
+                        bottom_10.append(key)
 
-        # 顯示目前投資組合
-        trading_system.show_portfolio(first_date, 'open')
-        print("---------------------------------------------------------------------------")
+                portfolio = trading_system.portfolio
+                # 處理前一個月的持股，通通平倉，並計算損益
+                monthly_profit_percent, monthly_profit_amount = close_all_positions(trading_system, database_dict, date_list, first_date)
+                monthly_profit_percent, monthly_profit_amount = calculate_monthly_results(monthly_profit_percent, monthly_profit_amount, first_date, total_values, dates, trading_system)
+                # 重新設定初始資金
+                trading_system.initial_money = 20000000
+                portfolio_split = 1000000
+                
+                execute_long_trades(bottom_10, first_date, yesterday, database_dict, date_list, portfolio_split, trading_system)
+                execute_short_trades(top_10, first_date, yesterday, database_dict, date_list, portfolio_split, trading_system)
 
-    # 統計整個回測的結果
-    calculate_and_print_trading_results(trading_system, date_list)
+                # 顯示目前投資組合
+                trading_system.show_portfolio(first_date, 'open')
+                print("---------------------------------------------------------------------------")
 
-    # 畫出總資產變化圖
-    plot_total_value_over_time(dates, total_values)
+            # 統計整個回測的結果並存成 xlsx
+            output_xlsx_name = f"/Users/youtengkai/Desktop/MomentumStrategy/output_CAPM_results/CAPM_MSW_{MomentumSlidingWindow}_RMSW_{ResidualMomentumSlidingWindow}.xlsx"
+            calculate_and_print_trading_results(trading_system, output_xlsx_name)
+
+            # 畫出總資產變化圖
+            # plot_total_value_over_time(dates, total_values)
