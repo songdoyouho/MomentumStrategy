@@ -1,5 +1,6 @@
 import os
 import json
+from tqdm import tqdm
 import pymysql
 
 class DatabaseController(object):
@@ -21,7 +22,7 @@ class DatabaseController(object):
                     min FLOAT,
                     close FLOAT,
                     spread FLOAT,
-                    trading_turnover INT,
+                    trading_turnover FLOAT,
                     PRIMARY KEY (date, stock_id)
                 );
             """)
@@ -56,20 +57,20 @@ if __name__ == '__main__':
         host='localhost',
         port=3306,
         user='root',
-        password='',  # 使用 'password' 而不是 'passwd'
+        password='test',  # 使用 'password' 而不是 'passwd'
         database='stocks_price_db',
         charset='utf8mb4'  # 使用 utf8mb4 支援更多的字符
     )
 
-    json_file_list = os.listdir('../stock_price_data')
+    json_file_list = os.listdir('..\\stock_price_data')
 
     try:
         # 創建資料庫和表格
         database_controller.create_database_and_tables(connection)
 
-        for json_file in json_file_list:
+        for json_file in tqdm(json_file_list, desc="處理JSON檔案"):
             # 載入 JSON 檔案
-            with open('../stock_price_data/' + json_file, 'r', encoding='utf-8') as file:
+            with open('..\\stock_price_data\\' + json_file, 'r', encoding='utf-8') as file:
                 data = json.load(file)
             
             # 準備要插入的資料
@@ -85,34 +86,34 @@ if __name__ == '__main__':
                     record['close'],
                     record['spread'],
                     record['Trading_turnover']
-                ) for record in data['data'] if record['close'] != 0
+                ) for record in tqdm(data['data'], desc=f"處理 {json_file} 中的記錄", leave=False) if record['close'] != 0
             ]
             
             # 批量插入股票資料
             database_controller.insert_stock_data_bulk(connection, stock_data_list)
 
-        # # 載入 JSON 檔案
-        # with open('../stock_price_data/' + 'TAIEX.json', 'r', encoding='utf-8') as file:
-        #     data = json.load(file)
+        # 載入 JSON 檔案
+        with open('..\\stock_price_data\\' + 'TAIEX.json', 'r', encoding='utf-8') as file:
+            data = json.load(file)
         
-        # # 準備要插入的資料
-        # stock_data_list = [
-        #     (
-        #         record['date'],
-        #         record['stock_id'],
-        #         record['Trading_Volume'],
-        #         record['Trading_money'],
-        #         record['open'],
-        #         record['max'],
-        #         record['min'],
-        #         record['close'],
-        #         record['spread'],
-        #         record['Trading_turnover']
-        #     ) for record in data['data']
-        # ]
+        # 準備要插入的資料
+        stock_data_list = [
+            (
+                record['date'],
+                record['stock_id'],
+                record['Trading_Volume'],
+                record['Trading_money'],
+                record['open'],
+                record['max'],
+                record['min'],
+                record['close'],
+                record['spread'],
+                record['Trading_turnover']
+            ) for record in data['data']
+        ]
         
-        # # 批量插入股票資料
-        # database_controller.insert_stock_data_bulk(connection, stock_data_list)
+        # 批量插入股票資料
+        database_controller.insert_stock_data_bulk(connection, stock_data_list)
     finally:
         connection.close()
 
