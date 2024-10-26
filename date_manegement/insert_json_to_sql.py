@@ -57,7 +57,7 @@ if __name__ == '__main__':
         host='localhost',
         port=3306,
         user='root',
-        password='test',  # 使用 'password' 而不是 'passwd'
+        password='',  # 使用 'password' 而不是 'passwd'
         database='stocks_price_db',
         charset='utf8mb4'  # 使用 utf8mb4 支援更多的字符
     )
