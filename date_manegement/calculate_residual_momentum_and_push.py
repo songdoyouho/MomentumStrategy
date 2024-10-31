@@ -9,8 +9,9 @@ import statsmodels.api as sm
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from itertools import product
 
-MomentumSlidingWindow = 252 # 60 ~ 1000 step 20
-ResidualMomentumSlidingWindow = 21 # 40 ~ 980 step 20
+# MomentumSlidingWindow = 252 # 60 ~ 1000 step 20
+# ResidualMomentumSlidingWindow = 21 # 40 ~ 980 step 20
+# sql id 上限是 2,153,422,416
 
 def get_stock_data():
     """
@@ -32,60 +33,12 @@ def get_stock_data():
     
     return stock_data, TAIEX_data
 
-def update_residual_momentum_batch(data_batch):
-    """
-    批量更新資料庫中的殘差動量。
-    
-    參數：
-    - data_batch：包含要更新的數據的列表，每個元素為 (殘差動量, 股票代碼, 日期)。
-    """
-    connection = pymysql.connect(
-        host='localhost', port=3306, user='root', password='',
-        database='stocks_price_db', charset='utf8mb4',
-        cursorclass=pymysql.cursors.DictCursor
-    )
-    try:
-        with connection.cursor() as cursor:
-            sql = """
-            UPDATE stock_data
-            SET residual_momentum = %s
-            WHERE stock_id = %s AND date = %s
-            """
-            cursor.executemany(sql, data_batch)
-        connection.commit()
-    finally:
-        connection.close()
-
 def calculate_residual_momentum(asset_returns, market_returns):
-    """
-    計算殘差動量。
-    
-    參數：
-    - asset_returns：資產收益率。
-    - market_returns：市場收益率。
-    
-    返回：
-    - 殘差動量值。
-    """
     market_returns_with_const = sm.add_constant(market_returns)
     model = sm.OLS(asset_returns, market_returns_with_const).fit()
-    residuals = model.resid
-    return sum(residuals[-ResidualMomentumSlidingWindow:])
+    return model.resid
 
-def process_stock(stock_id, stock_prices, TAIEX_data, MomentumSlidingWindow, ResidualMomentumSlidingWindow):
-    """
-    處理單一股票的數據，計算其殘差動量。
-    
-    參數：
-    - stock_id：股票代碼。
-    - stock_prices：股票價格數據。
-    - TAIEX_data：台灣加權指數數據。
-    - MomentumSlidingWindow：動量滑動窗口大小。
-    - ResidualMomentumSlidingWindow：殘差動量滑動窗口大小。
-    
-    返回：
-    - 包含更新數據的列表，每個元素為 (殘差動量, 股票代碼, 日期, MomentumSlidingWindow, ResidualMomentumSlidingWindow)。
-    """
+def calculate_daily_residual_momentum(stock_id, stock_prices, TAIEX_data, MomentumSlidingWindow):
     update_batch = []
     for i in range(MomentumSlidingWindow, len(stock_prices) + 1):
         sliding_window_data = stock_prices[i - MomentumSlidingWindow:i]
@@ -95,22 +48,22 @@ def process_stock(stock_id, stock_prices, TAIEX_data, MomentumSlidingWindow, Res
         
         for date, close in sliding_window_data:
             if date not in TAIEX_data:
-                break
+                continue
             asset_prices.append(close)
             market_prices.append(TAIEX_data[date])
-        
-        if len(asset_prices) != MomentumSlidingWindow:
-            continue
         
         asset_log_returns = np.log(np.array(asset_prices[1:]) / np.array(asset_prices[:-1]))
         market_log_returns = np.log(np.array(market_prices[1:]) / np.array(market_prices[:-1]))
         
-        residual_momentum = calculate_residual_momentum(asset_log_returns, market_log_returns)
-        update_batch.append((float(residual_momentum), stock_id, sliding_window_data[-1][0], MomentumSlidingWindow, ResidualMomentumSlidingWindow))
+        residual = calculate_residual_momentum(asset_log_returns, market_log_returns)
+
+        for ResidualMomentumSlidingWindow in range(40, min(MomentumSlidingWindow + 1, 981), 40):
+            residual_momentum = round(sum(residual[ResidualMomentumSlidingWindow - 40:ResidualMomentumSlidingWindow]), 4)
+            update_batch.append([residual_momentum, stock_id, sliding_window_data[-1][0], MomentumSlidingWindow, ResidualMomentumSlidingWindow])
     
     return update_batch
 
-def insert_residual_momentum_results(connection, data_batch):
+def insert_residual_momentum_results(data_batch):
     """
     批量插入殘差動量結果到資料庫。
     
@@ -118,6 +71,11 @@ def insert_residual_momentum_results(connection, data_batch):
     - connection：資料庫連接。
     - data_batch：包含要插入的數據的列表，每個元素為 (殘差動量, 股票代碼, 日期, MomentumSlidingWindow, ResidualMomentumSlidingWindow)。
     """
+    connection = pymysql.connect(
+        host='localhost', port=3306, user='root', password='',
+        database='stocks_price_db', charset='utf8mb4',
+        cursorclass=pymysql.cursors.DictCursor
+    )
     try:
         with connection.cursor() as cursor:
             sql = """
@@ -130,28 +88,7 @@ def insert_residual_momentum_results(connection, data_batch):
     except Exception as e:
         print(f"插入數據時發生錯誤: {e}")
         connection.rollback()
-
-def add_residual_momentum_column():
-    # 連接到你的 MySQL 資料庫
-    connection = pymysql.connect(
-        host='localhost',
-        port=3306,
-        user='root',
-        password='',  # 使用 'password' 而不是 'passwd'
-        database='stocks_price_db',
-        charset='utf8mb4',  # 使用 utf8mb4 支援更多的字符
-        cursorclass=pymysql.cursors.DictCursor
-    )
-
-    try:
-        with connection.cursor() as cursor:
-            # 新增 residual_momentum 欄位
-            sql = "ALTER TABLE stock_data ADD COLUMN residual_momentum DOUBLE;"
-            cursor.execute(sql)
-        connection.commit()
-    except pymysql.MySQLError as e:
-        print(f"新增欄位時發生錯誤: {e.args}")
-
+    connection.close()
 
 def create_residual_momentum_results_table():
     connection = pymysql.connect(
@@ -173,7 +110,7 @@ def create_residual_momentum_results_table():
                 date VARCHAR(10),
                 momentum_sliding_window INT,
                 residual_momentum_sliding_window INT,
-                residual_momentum DOUBLE,
+                residual_momentum FLOAT,
                 INDEX idx_stock_date (stock_id, date),
                 INDEX idx_parameters (momentum_sliding_window, residual_momentum_sliding_window),
                 CONSTRAINT fk_stock_date FOREIGN KEY (stock_id, date) 
@@ -219,40 +156,25 @@ def fix_stock_data_primary_key():
     finally:
         connection.close()
 
-if __name__ == '__main__':
-    # 在主程序中調用這個函數
-    # check_stock_data_table()
-    # fix_stock_data_primary_key()
-    # check_stock_data_table()
-    # create_residual_momentum_results_table()
+def process_stock(stock_id, prices, TAIEX_data):
+    update_batch = []
+    print(f"處理股票: {stock_id}")
+    for MomentumSlidingWindow in range(500, 1001, 40):
+        print(f"處理股票 {stock_id} 的 MomentumSlidingWindow: {MomentumSlidingWindow}")
+        update_batch.extend(calculate_daily_residual_momentum(stock_id, prices, TAIEX_data, MomentumSlidingWindow))
+        insert_residual_momentum_results(update_batch)
+        update_batch = []
+    return update_batch
 
-    # add_residual_momentum_column()
+if __name__ == '__main__':
+    check_stock_data_table()
+    fix_stock_data_primary_key()
+    check_stock_data_table()
+    create_residual_momentum_results_table()
 
     stock_data, TAIEX_data = get_stock_data()
-    
-    connection = pymysql.connect(
-        host='localhost', port=3306, user='root', password='',
-        database='stocks_price_db', charset='utf8mb4',
-        cursorclass=pymysql.cursors.DictCursor
-    )
 
-    try:
-        for MomentumSlidingWindow in range(500, 1001, 40):
-            for ResidualMomentumSlidingWindow in range(40, min(MomentumSlidingWindow, 981), 40):
-                all_updates = []
-                with ThreadPoolExecutor(max_workers=20) as executor:
-                    future_to_stock = {executor.submit(process_stock, stock_id, prices, TAIEX_data, MomentumSlidingWindow, ResidualMomentumSlidingWindow): stock_id for stock_id, prices in stock_data.items()}
-                    for future in tqdm(as_completed(future_to_stock), total=len(stock_data), desc=f"處理股票 (MSW={MomentumSlidingWindow}, RMSW={ResidualMomentumSlidingWindow})"):
-                        stock_id = future_to_stock[future]
-                        try:
-                            updates = future.result()
-                            all_updates.extend(updates)
-                        except Exception as exc:
-                            print(f'{stock_id} 生成了一個異常: {exc}')
-                
-                # 批量插入結果到資料庫
-                insert_residual_momentum_results(connection, all_updates)
-
-        print("所有參數組合的殘差動量已計算並插入資料庫。")
-    finally:
-        connection.close()
+    with ThreadPoolExecutor(max_workers=12) as executor:
+        for stock_id, prices in stock_data.items():
+            executor.submit(process_stock, stock_id, prices, TAIEX_data)
+     
