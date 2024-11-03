@@ -159,12 +159,12 @@ def find_next_valid_date_in_future(database_dict, stock_id, date_list, start_dat
     :param start_date: 起始日期
     :return: (current_date, open_price) 最近有效交易日及其開盤價
     """
-    print(stock_id, start_date)
+    # print(stock_id, start_date)
     date_index = date_list.index(start_date)
-    print(date_index, len(date_list))
+    # print(date_index, len(date_list))
     for i in range(date_index, len(date_list)):
         current_date = date_list[i]
-        print(current_date, stock_id in database_dict, current_date in database_dict[stock_id])
+        # print(current_date, stock_id in database_dict, current_date in database_dict[stock_id])
         if stock_id in database_dict and current_date in database_dict[stock_id]:
             open_price = database_dict[stock_id][current_date]['open']
             if open_price is not None:

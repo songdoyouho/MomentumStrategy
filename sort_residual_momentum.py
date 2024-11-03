@@ -33,8 +33,8 @@ def get_backtest_date():
             cursor.execute("SELECT DISTINCT date FROM stock_data ORDER BY date ASC;")
             date_list = [row['date'] for row in cursor.fetchall()]
 
-            # 2. 取得每個 `stock_id` 的 `date`, `stock_id`, `close`, `residual_momentum` 並轉換成指定格式
-            cursor.execute("SELECT stock_id, trading_money, date, open, close, residual_momentum FROM stock_data;")
+            # 2. 取得每個 `stock_id` 的 `date`, `stock_id`, `close` 並轉換成指定格式
+            cursor.execute("SELECT stock_id, trading_money, date, open, close FROM stock_data;")
             data = cursor.fetchall()
             database_dict = {}
             for info in data:
@@ -43,8 +43,7 @@ def get_backtest_date():
                 database_dict[info['stock_id']][info['date']] = {
                     'trading_money': info['trading_money'],
                     'open': info['open'],
-                    'close': info['close'],
-                    'residual_momentum': info['residual_momentum']
+                    'close': info['close']
                 }
 
             # 3. 取得不重複的 `stock_id` 並存成一個 list

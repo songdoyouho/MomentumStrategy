@@ -5,30 +5,6 @@ from portfolio import TradingSystem
 from sort_residual_momentum import get_backtest_date
 from date_manegement.utils import *
 
-def initialize_data(MomentumSlidingWindow, ResidualMomentumSlidingWindow):
-    """
-    初始化回測所需的數據
-    
-    參數:
-    MomentumSlidingWindow: 動量滑動窗口大小
-    ResidualMomentumSlidingWindow: 殘差動量滑動窗口大小
-    
-    返回:
-    date_list: 日期列表
-    database_dict: 數據庫字典
-    stock_id_list: 股票ID列表
-    trading_system: 交易系統實例
-    daliy_median: 每日中位數
-    sorted_stock_id_residual_momentum_dict: 排序後的股票殘差動量字典
-    first_day_in_a_month: 每月第一個交易日
-    """
-    date_list, database_dict, stock_id_list = get_backtest_date()
-    trading_system = TradingSystem(database_dict, date_list)
-    daliy_median = get_daliy_median(date_list, stock_id_list, database_dict)
-    sorted_stock_id_residual_momentum_dict = get_and_sort_residual_momentum(MomentumSlidingWindow, ResidualMomentumSlidingWindow)
-    first_day_in_a_month = get_first_day_and_yesterday(next(iter(sorted_stock_id_residual_momentum_dict)))
-    return date_list, database_dict, stock_id_list, trading_system, daliy_median, sorted_stock_id_residual_momentum_dict, first_day_in_a_month
-
 def get_and_sort_residual_momentum(MomentumSlidingWindow, ResidualMomentumSlidingWindow):
     """
     獲取並排序殘差動量
@@ -100,7 +76,7 @@ def close_all_positions(trading_system, database_dict, date_list, first_date):
                     trading_system.long_stock(valid_date_in_future, stock_id, stock_price, portfolio[stock_id]['long_quantity'], 'sell')
                 elif portfolio[stock_id]['position'] == 'short':
                     trading_system.short_stock(valid_date_in_future, stock_id, stock_price, portfolio[stock_id]['short_quantity'], 'buy')
-                print(trading_system.trade_log[-1]['profit_percent'], trading_system.trade_log[-1]['profit_amount'])
+                # print(trading_system.trade_log[-1]['profit_percent'], trading_system.trade_log[-1]['profit_amount'])
                 monthly_profit_percent.append(trading_system.trade_log[-1]['profit_percent'])
                 monthly_profit_amount.append(trading_system.trade_log[-1]['profit_amount'])
     return monthly_profit_percent, monthly_profit_amount
@@ -153,7 +129,7 @@ def execute_long_trades(top_10, first_date, yesterday, database_dict, date_list,
     trading_system: 交易系統實例
     """
     for stock_id in top_10:
-        print(stock_id, first_date)
+        # print(stock_id, first_date)
         valid_date_in_future, open_price = find_next_valid_date_in_future(database_dict, stock_id, date_list, first_date)
         valid_date_in_before, close_price = find_valid_date_in_before(database_dict, stock_id, date_list, yesterday)
         try:
@@ -274,20 +250,21 @@ if __name__ == '__main__':
     # 問題： stock_quantity 為 0 時，賣的時候會出現問題 => 在第一次買/賣的時候先檢查 stock_quantity 是否大於 0
     # 找 future price 的時候，如果沒有資料，要怎麼處理? 這會導致下個 loop 賣不掉這個持股 => 如果 future price 是 None，則往前找
 
+    start_time = datetime.now()
+    date_list, database_dict, stock_id_list = get_backtest_date()
+    trading_system = TradingSystem(database_dict, date_list)
+    daliy_median = get_daliy_median(date_list, stock_id_list, database_dict)
+    end_time = datetime.now()
+    execution_time = end_time - start_time
+    print(f"執行時間: {execution_time.total_seconds():.2f} 秒")
+
+    # total 234 個 iteration
     for MomentumSlidingWindow in range(500, 1001, 40):
         for ResidualMomentumSlidingWindow in range(40, min(MomentumSlidingWindow, 981), 40):
-            date_list, database_dict, stock_id_list, trading_system, daliy_median, sorted_stock_id_residual_momentum_dict, first_day_in_a_month = initialize_data(MomentumSlidingWindow, ResidualMomentumSlidingWindow)
-
+            start_time = datetime.now()
+            sorted_stock_id_residual_momentum_dict = get_and_sort_residual_momentum(MomentumSlidingWindow, ResidualMomentumSlidingWindow)
             total_values = []
             dates = []
-
-            # 拿到每天的 trading money 的中位數
-            daliy_median = get_daliy_median(date_list, stock_id_list, database_dict)
-
-            # 拿到每天的 residual momentum 然後排序，存成 dictionary
-            sorted_dates = sorted(sorted_stock_id_residual_momentum_dict.keys(), key=lambda x: datetime.strptime(x, '%Y-%m-%d'))
-            sorted_dict = {date: sorted_stock_id_residual_momentum_dict[date] for date in sorted_dates}
-            sorted_stock_id_residual_momentum_dict = sorted_dict
 
             first_date = None
             for date in sorted_stock_id_residual_momentum_dict.keys():
@@ -297,7 +274,7 @@ if __name__ == '__main__':
             # 拿到每個月的第一個開盤日日期，以及前一天的開盤日日期
             first_day_in_a_month = get_first_day_and_yesterday(first_date)
 
-            monthly_profit_percent = []
+            monthly_profit_percent = [] 
             monthly_profit_amount = []
 
             # 遍歷每個月的開盤日
@@ -333,16 +310,22 @@ if __name__ == '__main__':
                 trading_system.initial_money = 20000000
                 portfolio_split = 1000000
                 
-                execute_long_trades(bottom_10, first_date, yesterday, database_dict, date_list, portfolio_split, trading_system)
-                execute_short_trades(top_10, first_date, yesterday, database_dict, date_list, portfolio_split, trading_system)
+                if day != first_day_in_a_month[-1]:
+                    execute_long_trades(top_10, first_date, yesterday, database_dict, date_list, portfolio_split, trading_system)
+                    # execute_long_trades(bottom_10, first_date, yesterday, database_dict, date_list, portfolio_split, trading_system)
+                # execute_short_trades(top_10, first_date, yesterday, database_dict, date_list, portfolio_split, trading_system)
 
                 # 顯示目前投資組合
                 trading_system.show_portfolio(first_date, 'open')
                 print("---------------------------------------------------------------------------")
 
             # 統計整個回測的結果並存成 xlsx
-            output_xlsx_name = f"/Users/youtengkai/Desktop/MomentumStrategy/output_CAPM_results/CAPM_MSW_{MomentumSlidingWindow}_RMSW_{ResidualMomentumSlidingWindow}.xlsx"
+            output_xlsx_name = f"C:\\Users\\屁屁\\Desktop\\MomentumStrategy\\output_CAPM_results\\CAPM_MSW_{MomentumSlidingWindow}_RMSW_{ResidualMomentumSlidingWindow}.xlsx"
             calculate_and_print_trading_results(trading_system, output_xlsx_name)
+            trading_system.trade_log = []
+            end_time = datetime.now()
+            execution_time = end_time - start_time
+            print(f"MSW_{MomentumSlidingWindow}_RMSW_{ResidualMomentumSlidingWindow} 執行時間: {execution_time.total_seconds():.2f} 秒")
 
             # 畫出總資產變化圖
             # plot_total_value_over_time(dates, total_values)
